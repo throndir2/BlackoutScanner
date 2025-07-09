@@ -1,0 +1,89 @@
+using System.ComponentModel;
+using System.Drawing;
+using System.Runtime.CompilerServices;
+using System.Windows.Media.Imaging;
+using Newtonsoft.Json;
+
+namespace BlackoutScanner.Models
+{
+    public class CaptureField : INotifyPropertyChanged
+    {
+        private string _name = string.Empty;
+        public string Name
+        {
+            get => _name;
+            set
+            {
+                if (_name != value)
+                {
+                    _name = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private RelativeBounds _relativeBounds = new RelativeBounds();
+        public RelativeBounds RelativeBounds
+        {
+            get => _relativeBounds;
+            set
+            {
+                if (_relativeBounds != value)
+                {
+                    _relativeBounds = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(Bounds));
+                }
+            }
+        }
+
+        // For backward compatibility and UI display
+        [JsonIgnore]
+        public Rectangle Bounds
+        {
+            get => _boundsCache;
+            set
+            {
+                _boundsCache = value;
+                // Note: This requires a container rectangle to properly convert
+                // The actual conversion will happen in the context where the container is known
+                OnPropertyChanged();
+            }
+        }
+        private Rectangle _boundsCache;
+
+        private bool _isKeyField;
+        public bool IsKeyField
+        {
+            get => _isKeyField;
+            set
+            {
+                if (_isKeyField != value)
+                {
+                    _isKeyField = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [JsonIgnore]
+        private BitmapImage? _previewImage;
+        [JsonIgnore]
+        public BitmapImage? PreviewImage
+        {
+            get => _previewImage;
+            set
+            {
+                _previewImage = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+}
