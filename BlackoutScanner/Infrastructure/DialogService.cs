@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows;
 using BlackoutScanner.Interfaces;
+using BlackoutScanner.Views;
 using Microsoft.Win32;
 
 namespace BlackoutScanner.Infrastructure

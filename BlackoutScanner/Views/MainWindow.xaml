@@ -1,0 +1,288 @@
+<Window x:Class="BlackoutScanner.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BlackoutScanner"
+        xmlns:converters="clr-namespace:BlackoutScanner.Converters"
+        mc:Ignorable="d"
+        Title="Blackout Scanner"
+        Height="750"
+        Width="550"
+        Icon="../Assets/Images/Icon.512.ico">
+        <Window.Resources>
+                <converters:ProfileComparisonConverter x:Key="ProfileComparisonConverter"/>
+        </Window.Resources>
+
+        <Grid>
+                <Grid.RowDefinitions>
+                        <RowDefinition Height="*"
+                                       MinHeight="200"/>
+                        <RowDefinition Height="5"/>
+                        <RowDefinition Height="150"
+                                       MinHeight="50"/>
+                </Grid.RowDefinitions>
+
+                <TabControl Grid.Row="0">
+                        <!-- Tab for Scan -->
+                        <TabItem Header="Scan">
+                                <Grid Margin="10">
+                                        <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Scan Button -->
+                                        <Button x:Name="scanButton"
+                                                Content="Start Scanning"
+                                                Click="ScanButton_Click"
+                                                Height="50"
+                                                Grid.Row="0"
+                                                HorizontalAlignment="Stretch"/>
+
+                                        <StackPanel Grid.Row="1"
+                                                    Orientation="Horizontal"
+                                                    Margin="0,10,0,10">
+                                                <TextBlock Text="Last Scan: "
+                                                           VerticalAlignment="Center"/>
+                                                <TextBox x:Name="scanDateTextBox"
+                                                         IsReadOnly="True"
+                                                         Width="200"
+                                                         Margin="5,0,0,0"/>
+                                        </StackPanel>
+
+                                        <!-- Replace the Grid with TabControl -->
+                                        <TabControl x:Name="scanTabControl"
+                                                    Grid.Row="2">
+                                                <!-- Dynamic tabs will be added here -->
+                                        </TabControl>
+                                </Grid>
+                        </TabItem>
+
+                        <!-- Tab for Data -->
+                        <TabItem Header="Data">
+                                <Grid Margin="10">
+                                        <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Data controls at the top -->
+                                        <StackPanel Grid.Row="0"
+                                                    Orientation="Horizontal"
+                                                    Margin="0,0,0,10">
+                                                <TextBlock x:Name="dataProfileIndicator"
+                                                           Text="No active profile"
+                                                           VerticalAlignment="Center"
+                                                           Margin="10,0,0,0"/>
+                                                <TextBlock x:Name="dataUpdateIndicator"
+                                                           Visibility="Collapsed"
+                                                           VerticalAlignment="Center"
+                                                           Margin="10,0,0,0"/>
+                                                <TextBlock x:Name="unsavedIndicator"
+                                                           Text="● Unsaved changes"
+                                                           Foreground="Orange"
+                                                           Visibility="Collapsed"
+                                                           VerticalAlignment="Center"
+                                                           Margin="10,0,0,0"/>
+                                        </StackPanel>
+
+                                        <!-- Dynamic data tabs -->
+                                        <TabControl x:Name="dataTabControl"
+                                                    Grid.Row="1">
+                                                <!-- Dynamic tabs will be added here -->
+                                        </TabControl>
+                                </Grid>
+                        </TabItem>
+
+                        <!-- Tab for Import/Export -->
+                        <TabItem Header="Import/Export">
+                                <StackPanel Margin="10">
+                                        <Button Content="Export to TSV"
+                                                Click="ExportTsv_Click"
+                                                Margin="5"/>
+                                        <Button Content="Export to JSON"
+                                                Click="ExportJson_Click"
+                                                Margin="5"/>
+                                </StackPanel>
+                        </TabItem>
+
+                        <!-- Tab for Reports -->
+                        <TabItem Header="Reports">
+                                <StackPanel Margin="10">
+                                        <TextBlock Text="Reports will be available in a future version."/>
+                                </StackPanel>
+                        </TabItem>
+
+                        <!-- Tab for Configuration -->
+                        <TabItem Header="Configuration">
+                                <Grid Margin="10">
+                                        <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Game Profiles Section -->
+                                        <TextBlock Grid.Row="0"
+                                                   Text="Game Profiles"
+                                                   FontWeight="Bold"
+                                                   Margin="0,0,0,5"/>
+
+                                        <ListBox x:Name="profilesListBox"
+                                                 Grid.Row="1"
+                                                 Margin="0,0,0,10">
+                                                <ListBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                                <Border x:Name="itemBorder"
+                                                                        BorderThickness="2"
+                                                                        BorderBrush="Transparent"
+                                                                        CornerRadius="3"
+                                                                        Padding="5"
+                                                                        Margin="2">
+                                                                        <StackPanel Orientation="Horizontal">
+                                                                                <TextBlock x:Name="activeIndicator"
+                                                                                           Text="▶ "
+                                                                                           FontWeight="Bold"
+                                                                                           Foreground="{StaticResource AccentBrush}"
+                                                                                           Visibility="Collapsed"
+                                                                                           VerticalAlignment="Center"/>
+                                                                                <TextBlock x:Name="profileNameText"
+                                                                                           Text="{Binding ProfileName}"
+                                                                                           VerticalAlignment="Center"/>
+                                                                                <TextBlock x:Name="windowTitleText"
+                                                                                           Text="{Binding GameWindowTitle, StringFormat=' ({0})'}"
+                                                                                           Foreground="{StaticResource SecondaryForegroundBrush}"
+                                                                                           FontStyle="Italic"
+                                                                                           VerticalAlignment="Center"/>
+                                                                        </StackPanel>
+                                                                </Border>
+                                                                <DataTemplate.Triggers>
+                                                                        <DataTrigger Value="True">
+                                                                                <DataTrigger.Binding>
+                                                                                        <MultiBinding Converter="{StaticResource ProfileComparisonConverter}">
+                                                                                                <Binding/>
+                                                                                                <Binding Path="GameProfileManager.ActiveProfile"
+                                                                                                         RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                                        </MultiBinding>
+                                                                                </DataTrigger.Binding>
+                                                                                <Setter TargetName="itemBorder"
+                                                                                        Property="Background"
+                                                                                        Value="{StaticResource SelectedBackgroundBrush}"/>
+                                                                                <Setter TargetName="itemBorder"
+                                                                                        Property="BorderBrush"
+                                                                                        Value="{StaticResource AccentBrush}"/>
+                                                                                <Setter TargetName="activeIndicator"
+                                                                                        Property="Visibility"
+                                                                                        Value="Visible"/>
+                                                                                <Setter TargetName="profileNameText"
+                                                                                        Property="FontWeight"
+                                                                                        Value="Bold"/>
+                                                                        </DataTrigger>
+                                                                </DataTemplate.Triggers>
+                                                        </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                        </ListBox>
+
+                                        <StackPanel Grid.Row="2"
+                                                    Orientation="Horizontal"
+                                                    HorizontalAlignment="Right"
+                                                    Margin="0,0,0,20">
+                                                <Button Content="New"
+                                                        Click="NewProfileButton_Click"
+                                                        Margin="5"/>
+                                                <Button Content="Edit"
+                                                        Click="EditProfileButton_Click"
+                                                        Margin="5"/>
+                                                <Button Content="Delete"
+                                                        Click="DeleteProfileButton_Click"
+                                                        Margin="5"/>
+                                                <Button Content="Set Active"
+                                                        Click="SetActiveProfileButton_Click"
+                                                        Margin="5"
+                                                        FontWeight="Bold"/>
+                                        </StackPanel>
+
+                                        <!-- Debug Settings Section -->
+                                        <GroupBox Grid.Row="3"
+                                                  Header="Debug Settings">
+                                                <Grid Margin="5">
+                                                        <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <!-- Save Debug Images Option -->
+                                                        <CheckBox Grid.Row="0"
+                                                                  Grid.Column="0"
+                                                                  x:Name="saveDebugImagesCheckbox"
+                                                                  Content="Save Debug Images"
+                                                                  Margin="0,5,10,5"
+                                                                  Click="DebugSettings_Changed"/>
+
+                                                        <!-- Verbose Logging Option -->
+                                                        <CheckBox Grid.Row="1"
+                                                                  Grid.Column="0"
+                                                                  x:Name="verboseLoggingCheckbox"
+                                                                  Content="Verbose Logging"
+                                                                  Margin="0,5,10,5"
+                                                                  Click="DebugSettings_Changed"/>
+
+                                                        <!-- Debug Images Folder -->
+                                                        <TextBlock Grid.Row="2"
+                                                                   Grid.Column="0"
+                                                                   Text="Debug Images Folder:"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,5,10,5"/>
+                                                        <TextBox Grid.Row="2"
+                                                                 Grid.Column="1"
+                                                                 x:Name="debugImagesFolderTextBox"
+                                                                 Text="DebugImages"
+                                                                 Margin="0,5,10,5"/>
+                                                        <Button Grid.Row="2"
+                                                                Grid.Column="2"
+                                                                Content="Browse"
+                                                                Click="BrowseDebugFolder_Click"
+                                                                Margin="0,5,0,5"/>
+
+                                                        <!-- Open Debug Folder Button -->
+                                                        <Button Grid.Row="3"
+                                                                Grid.Column="0"
+                                                                Grid.ColumnSpan="3"
+                                                                Content="Open Debug Images Folder"
+                                                                Click="OpenDebugFolder_Click"
+                                                                Margin="0,10,0,5"/>
+                                                </Grid>
+                                        </GroupBox>
+                                </Grid>
+                        </TabItem>
+                </TabControl>
+
+                <GridSplitter Grid.Row="1"
+                              Height="5"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Center"
+                              Background="Gray"
+                              ShowsPreview="True"
+                              ResizeDirection="Rows"
+                              ResizeBehavior="PreviousAndNext"/>
+
+                <!-- Log Area  -->
+                <TextBox x:Name="logArea"
+                         Grid.Row="2"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Disabled"
+                         Margin="10"/>
+        </Grid>
+</Window>

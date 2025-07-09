@@ -2,6 +2,7 @@
 using System;
 using System.Windows;
 using BlackoutScanner.Infrastructure;
+using BlackoutScanner.Utilities;
 
 namespace BlackoutScanner
 {
