@@ -1,6 +1,7 @@
 ﻿using Serilog;
 using System;
 using System.Windows;
+using BlackoutScanner.Infrastructure;
 
 namespace BlackoutScanner
 {
@@ -12,6 +13,17 @@ namespace BlackoutScanner
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // Configure Serilog with UI sink BEFORE ServiceLocator
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Debug()
+                .WriteTo.File("logs/blackoutscanner-.log", rollingInterval: RollingInterval.Day)
+                .WriteTo.UI() // Add the UI sink here
+                .CreateLogger();
+
+            // Configure ServiceLocator after Serilog
+            ServiceLocator.Configure();
+
             SetProcessDpiAwareness();
         }
 
@@ -31,6 +43,9 @@ namespace BlackoutScanner
 
         protected override void OnExit(ExitEventArgs e)
         {
+            // Flush and close Serilog
+            Log.CloseAndFlush();
+
             base.OnExit(e);
         }
     }

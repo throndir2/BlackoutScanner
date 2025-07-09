@@ -1,3 +1,4 @@
+using BlackoutScanner.Interfaces;
 using BlackoutScanner.Models;
 using Newtonsoft.Json;
 using Serilog;
@@ -5,24 +6,35 @@ using System.IO;
 
 namespace BlackoutScanner
 {
-    public class GameProfileManager
+    public class GameProfileManager : IGameProfileManager
     {
+        private readonly IFileSystem _fileSystem;
         private readonly string profilesDirectory;
         private readonly string activeProfileFilePath;
         public List<GameProfile> Profiles { get; private set; } = new List<GameProfile>();
         public GameProfile? ActiveProfile { get; set; }
 
-        public GameProfileManager(string directory = "profiles")
+        public GameProfileManager(IFileSystem fileSystem)
         {
-            profilesDirectory = directory;
-            activeProfileFilePath = Path.Combine(profilesDirectory, "_active_profile.txt");
+            _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            profilesDirectory = "profiles";
+            activeProfileFilePath = _fileSystem.Combine(profilesDirectory, "_active_profile.txt");
             Log.Information($"GameProfileManager: Looking for profiles in directory: {Path.GetFullPath(profilesDirectory)}");
 
-            if (!Directory.Exists(profilesDirectory))
+            if (!_fileSystem.DirectoryExists(profilesDirectory))
             {
                 Log.Information($"GameProfileManager: Creating profiles directory: {profilesDirectory}");
-                Directory.CreateDirectory(profilesDirectory);
+                _fileSystem.CreateDirectory(profilesDirectory);
             }
+            LoadProfiles();
+            LoadActiveProfile();
+        }
+
+        // Constructor for backward compatibility/testing
+        public GameProfileManager(IFileSystem fileSystem, string directory) : this(fileSystem)
+        {
+            profilesDirectory = directory;
+            activeProfileFilePath = _fileSystem.Combine(profilesDirectory, "_active_profile.txt");
             LoadProfiles();
             LoadActiveProfile();
         }
@@ -30,7 +42,7 @@ namespace BlackoutScanner
         public void LoadProfiles()
         {
             Profiles.Clear();
-            var profileFiles = Directory.GetFiles(profilesDirectory, "*.json");
+            var profileFiles = _fileSystem.GetFiles(profilesDirectory, "*.json");
             Log.Information($"GameProfileManager: Found {profileFiles.Length} profile files in {profilesDirectory}");
 
             foreach (var file in profileFiles)
@@ -38,7 +50,7 @@ namespace BlackoutScanner
                 try
                 {
                     Log.Information($"GameProfileManager: Loading profile from file: {file}");
-                    var json = File.ReadAllText(file);
+                    var json = _fileSystem.ReadAllText(file);
                     var profile = JsonConvert.DeserializeObject<GameProfile>(json);
                     if (profile != null)
                     {
@@ -63,9 +75,9 @@ namespace BlackoutScanner
         {
             try
             {
-                if (File.Exists(activeProfileFilePath))
+                if (_fileSystem.FileExists(activeProfileFilePath))
                 {
-                    var activeProfileName = File.ReadAllText(activeProfileFilePath).Trim();
+                    var activeProfileName = _fileSystem.ReadAllText(activeProfileFilePath).Trim();
                     var profile = Profiles.FirstOrDefault(p => p.ProfileName == activeProfileName);
                     if (profile != null)
                     {
@@ -90,12 +102,12 @@ namespace BlackoutScanner
             {
                 if (ActiveProfile != null)
                 {
-                    File.WriteAllText(activeProfileFilePath, ActiveProfile.ProfileName);
+                    _fileSystem.WriteAllText(activeProfileFilePath, ActiveProfile.ProfileName);
                     Log.Information($"GameProfileManager: Saved active profile '{ActiveProfile.ProfileName}'");
                 }
-                else if (File.Exists(activeProfileFilePath))
+                else if (_fileSystem.FileExists(activeProfileFilePath))
                 {
-                    File.Delete(activeProfileFilePath);
+                    _fileSystem.DeleteFile(activeProfileFilePath);
                     Log.Information("GameProfileManager: Cleared active profile");
                 }
             }
@@ -107,9 +119,9 @@ namespace BlackoutScanner
 
         public void SaveProfile(GameProfile profile)
         {
-            var filePath = Path.Combine(profilesDirectory, $"{profile.ProfileName}.json");
+            var filePath = _fileSystem.Combine(profilesDirectory, $"{profile.ProfileName}.json");
             var json = JsonConvert.SerializeObject(profile, Formatting.Indented);
-            File.WriteAllText(filePath, json);
+            _fileSystem.WriteAllText(filePath, json);
 
             // Update existing profile or add new one
             var existingProfile = Profiles.FirstOrDefault(p => p.ProfileName == profile.ProfileName);
@@ -135,10 +147,10 @@ namespace BlackoutScanner
         {
             try
             {
-                var filePath = Path.Combine(profilesDirectory, $"{profile.ProfileName}.json");
-                if (File.Exists(filePath))
+                var filePath = _fileSystem.Combine(profilesDirectory, $"{profile.ProfileName}.json");
+                if (_fileSystem.FileExists(filePath))
                 {
-                    File.Delete(filePath);
+                    _fileSystem.DeleteFile(filePath);
                     Profiles.Remove(profile);
 
                     // If we deleted the active profile, clear it

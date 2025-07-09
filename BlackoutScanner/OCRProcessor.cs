@@ -1,26 +1,54 @@
-﻿using BlackoutScanner.Models;
-using Serilog;
+﻿using System;
 using System.Collections.Concurrent;
-using System.Drawing; // For Bitmap
-using System.IO; // For MemoryStream
-using System.Net;
+using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
+using BlackoutScanner.Interfaces;
+using BlackoutScanner.Models;
 using Tesseract;
+using Serilog;
 using ImageFormat = System.Drawing.Imaging.ImageFormat;
 
 namespace BlackoutScanner
 {
-    public class OCRProcessor : IDisposable
+    public class OCRProcessor : IOCRProcessor
     {
         private Dictionary<string, TesseractEngine> tesseractEngines = new Dictionary<string, TesseractEngine>();
         private ConcurrentDictionary<string, object> engineLocks = new ConcurrentDictionary<string, object>();
         private Dictionary<string, OCRResult> ocrResultsCache = new Dictionary<string, OCRResult>();
         private Dictionary<string, string> imageDataCache = new Dictionary<string, string>();
 
-        public OCRProcessor(string[] supportedLanguages, string tessdataDirectory)
+        private readonly IImageProcessor _imageProcessor;
+        private readonly IFileSystem _fileSystem;
+        private readonly string[] _supportedLanguages;
+        private readonly string _tessdataDirectory;
+
+        // Default constructor for DI
+        public OCRProcessor(IImageProcessor imageProcessor, IFileSystem fileSystem)
         {
+            _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
+            _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+
+            // Default values
+            _supportedLanguages = new[] { "eng", "kor", "jpn", "chi_sim", "chi_tra" };
+            _tessdataDirectory = "tessdata";
+
+            InitializeTesseractEngines(_supportedLanguages, _tessdataDirectory);
+        }
+
+        // For testing and specific configurations
+        public OCRProcessor(IImageProcessor imageProcessor, IFileSystem fileSystem, string[] supportedLanguages, string tessdataDirectory)
+        {
+            _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
+            _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            _supportedLanguages = supportedLanguages ?? throw new ArgumentNullException(nameof(supportedLanguages));
+            _tessdataDirectory = tessdataDirectory ?? throw new ArgumentNullException(nameof(tessdataDirectory));
+
             InitializeTesseractEngines(supportedLanguages, tessdataDirectory);
         }
 
@@ -80,7 +108,59 @@ namespace BlackoutScanner
         }
 
         // Method to save debug image information
-        public void SaveDebugImage(Bitmap bitmap, string imageHash, string category, string fieldName, string ocrResult, float confidence, bool saveDebugImages, string debugImagesFolder, bool verboseLogging)
+        public void SaveDebugImage(Bitmap bitmap, string category, string fieldName)
+        {
+            string debugImagesFolder = "DebugImages";
+            bool verboseLogging = true;
+
+            // Generate a hash for the bitmap
+            BitmapImage bitmapImage = ConvertBitmapToBitmapImage(bitmap);
+            string imageHash = GenerateImageHash(bitmapImage);
+
+            // Get the OCR result if available
+            string ocrResult = "";
+            float confidence = 0;
+            if (ocrResultsCache.TryGetValue(imageHash, out OCRResult? result) && result != null)
+            {
+                ocrResult = result.Text;
+                confidence = CalculateAverageConfidence(result);
+            }
+
+            try
+            {
+                // Create a folder structure organized by date and time
+                DateTime now = DateTime.Now;
+                string dateFolder = Path.Combine(debugImagesFolder, now.ToString("yyyy-MM-dd"));
+                string sessionFolder = Path.Combine(dateFolder, now.ToString("HH-mm-ss"));
+
+                // Ensure the directory exists
+                Directory.CreateDirectory(sessionFolder);
+
+                // Create a filename with hash, category, field name
+                string fileName = $"{now.ToString("HHmmss")}_{category}_{fieldName}_{imageHash.Substring(0, 8)}.png";
+                string filePath = Path.Combine(sessionFolder, fileName);
+
+                // Save the bitmap
+                bitmap.Save(filePath);
+
+                // Log with a link to the image file
+                string message = $"OCR Debug: '{category}/{fieldName}' - Result: '{ocrResult}' (Confidence: {confidence:F2})\nImage saved: {Path.GetFullPath(filePath)}";
+                Log.Information(message);
+
+                if (verboseLogging)
+                {
+                    // This will log to UI via the ActionSink
+                    Log.Debug("UI: " + message);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to save debug image");
+            }
+        }
+
+        // For internal use - keep original method with full parameters
+        internal void SaveDebugImage(Bitmap bitmap, string imageHash, string category, string fieldName, string ocrResult, float confidence, bool saveDebugImages, string debugImagesFolder, bool verboseLogging)
         {
             if (!saveDebugImages) return;
 
@@ -117,8 +197,24 @@ namespace BlackoutScanner
             }
         }
 
-        public OCRResult ProcessImageWithFallback(Bitmap bitmap, float confidenceThreshold, bool numericalOnly, bool saveDebugImages = false, string debugImagesFolder = "DebugImages", bool verboseLogging = false, string category = "", string fieldName = "")
+        public OCRResult ProcessImage(Bitmap bitmap, string category = "", string fieldName = "")
         {
+            // Default values for processing
+            int attempt = 0;
+            bool numericalOnly = false;
+            bool saveDebugImages = false;
+            string debugImagesFolder = "DebugImages";
+            bool verboseLogging = false;
+
+            return ProcessImageWithFallback(bitmap, attempt, numericalOnly, saveDebugImages, debugImagesFolder, verboseLogging, category, fieldName);
+        }
+
+        // Keep original method for backward compatibility
+        public OCRResult ProcessImageWithFallback(Bitmap bitmap, int attempt, bool numericalOnly, bool saveDebugImages = false, string debugImagesFolder = "DebugImages", bool verboseLogging = false, string category = "", string fieldName = "")
+        {
+            // Define a default confidence threshold (previously it was a parameter)
+            float confidenceThreshold = 80.0f;
+
             BitmapImage bitmapImage = ConvertBitmapToBitmapImage(bitmap);
 
             // Generate a hash for the bitmap

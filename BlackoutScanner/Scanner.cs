@@ -1,16 +1,17 @@
-﻿using BlackoutScanner.Models;
+﻿using BlackoutScanner.Interfaces;
+using BlackoutScanner.Models;
 using Serilog;
 using System.Drawing;
 using System.Windows.Media.Imaging;
 
 namespace BlackoutScanner
 {
-    public class Scanner
+    public class Scanner : IScanner
     {
         private bool continueScanning = false;
-        private readonly DataManager dataManager;
-        private readonly OCRProcessor ocrProcessor;
-        private readonly ScreenCapture screenCapture;
+        private readonly IDataManager dataManager;
+        private readonly IOCRProcessor ocrProcessor;
+        private readonly IScreenCapture screenCapture;
         private GameProfile? activeProfile;
 
         // Debug settings
@@ -25,11 +26,11 @@ namespace BlackoutScanner
         public event Action<DateTime>? ScanDateUpdated;
         public event Action<string>? CategoryScanning; // Add this new event
 
-        public Scanner(DataManager dataManager, OCRProcessor ocrProcessor)
+        public Scanner(IDataManager dataManager, IOCRProcessor ocrProcessor, IScreenCapture screenCapture)
         {
             this.dataManager = dataManager;
             this.ocrProcessor = ocrProcessor;
-            this.screenCapture = new ScreenCapture();
+            this.screenCapture = screenCapture;
 
             // Default debug settings
             this.saveDebugImages = false;

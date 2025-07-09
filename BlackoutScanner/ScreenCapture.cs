@@ -2,11 +2,12 @@
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Text;
+using BlackoutScanner.Interfaces;
 using Serilog;
 
 namespace BlackoutScanner
 {
-    public class ScreenCapture
+    public class ScreenCapture : IScreenCapture
     {
         [DllImport("user32.dll")]
         private static extern IntPtr GetDesktopWindow();
@@ -108,9 +109,9 @@ namespace BlackoutScanner
             return foundWindow;
         }
 
-        public Rectangle GetWindowRectangle(string windowTitle)
+        public Rectangle GetGameWindowRect(string windowTitle)
         {
-            IntPtr hWnd = FindWindowByTitle(windowTitle);
+            IntPtr hWnd = GetGameWindowHandle(windowTitle);
 
             if (hWnd != IntPtr.Zero)
             {
@@ -128,9 +129,9 @@ namespace BlackoutScanner
             return Rectangle.Empty;
         }
 
-        public Rectangle GetClientRectangle(string windowTitle)
+        public Rectangle GetGameWindowRectEx(string windowTitle)
         {
-            IntPtr hWnd = FindWindowByTitle(windowTitle);
+            IntPtr hWnd = GetGameWindowHandle(windowTitle);
             if (hWnd != IntPtr.Zero)
             {
                 if (GetClientRect(hWnd, out RECT clientRect))
@@ -144,6 +145,22 @@ namespace BlackoutScanner
                 }
             }
             return Rectangle.Empty;
+        }
+
+        public IntPtr GetGameWindowHandle(string windowTitle)
+        {
+            return FindWindowByTitle(windowTitle);
+        }
+
+        // Keeping these methods for backward compatibility
+        public Rectangle GetWindowRectangle(string windowTitle)
+        {
+            return GetGameWindowRect(windowTitle);
+        }
+
+        public Rectangle GetClientRectangle(string windowTitle)
+        {
+            return GetGameWindowRectEx(windowTitle);
         }
 
         public void BringGameWindowToFront(string windowTitle)

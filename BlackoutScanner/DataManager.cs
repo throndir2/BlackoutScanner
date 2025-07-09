@@ -1,4 +1,5 @@
-﻿using BlackoutScanner.Models;
+﻿using BlackoutScanner.Interfaces;
+using BlackoutScanner.Models;
 using Newtonsoft.Json;
 using Serilog;
 using System.IO;
@@ -6,28 +7,38 @@ using System.Text;
 
 namespace BlackoutScanner
 {
-    public class DataManager
+    public class DataManager : IDataManager
     {
+        private readonly IFileSystem _fileSystem;
         private readonly string jsonFilePath;
         private readonly string invalidJsonFilePath;
         private bool hasUnsavedChanges = false;
 
         public Dictionary<string, DataRecord> DataRecordDictionary { get; private set; } = new Dictionary<string, DataRecord>();
 
-        public DataManager(string filePath = "data_records.json", string invalidFilePath = "invalid_data_records.json")
+        public DataManager(IFileSystem fileSystem)
+        {
+            _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            jsonFilePath = "data_records.json";
+            invalidJsonFilePath = "invalid_data_records.json";
+            LoadDataRecords(); // Load data upon instantiation
+        }
+
+        // Constructor for backward compatibility/testing
+        public DataManager(IFileSystem fileSystem, string filePath, string invalidFilePath) : this(fileSystem)
         {
             jsonFilePath = filePath;
             invalidJsonFilePath = invalidFilePath;
-            LoadDataRecords(); // Load data upon instantiation
+            LoadDataRecords();
         }
 
         private void LoadDataRecords()
         {
             try
             {
-                if (File.Exists(jsonFilePath))
+                if (_fileSystem.FileExists(jsonFilePath))
                 {
-                    string jsonData = File.ReadAllText(jsonFilePath);
+                    string jsonData = _fileSystem.ReadAllText(jsonFilePath);
                     var dataRecordList = JsonConvert.DeserializeObject<List<DataRecord>>(jsonData) ?? new List<DataRecord>();
 
                     DataRecordDictionary.Clear();
@@ -61,9 +72,9 @@ namespace BlackoutScanner
                 string jsonFileName = $"data_records_{safeProfileName}.json";
 
                 // Try new filename format first
-                if (File.Exists(jsonFileName))
+                if (_fileSystem.FileExists(jsonFileName))
                 {
-                    string jsonData = File.ReadAllText(jsonFileName);
+                    string jsonData = _fileSystem.ReadAllText(jsonFileName);
                     var dataRecordList = JsonConvert.DeserializeObject<List<DataRecord>>(jsonData) ?? new List<DataRecord>();
 
                     DataRecordDictionary.Clear();
@@ -81,9 +92,9 @@ namespace BlackoutScanner
                     Log.Information($"Data records loaded successfully for profile '{profile.ProfileName}'. Loaded {DataRecordDictionary.Count} records.");
                 }
                 // Fall back to old filename for backward compatibility
-                else if (File.Exists(jsonFilePath))
+                else if (_fileSystem.FileExists(jsonFilePath))
                 {
-                    string jsonData = File.ReadAllText(jsonFilePath);
+                    string jsonData = _fileSystem.ReadAllText(jsonFilePath);
                     var dataRecordList = JsonConvert.DeserializeObject<List<DataRecord>>(jsonData) ?? new List<DataRecord>();
 
                     DataRecordDictionary.Clear();
@@ -132,7 +143,7 @@ namespace BlackoutScanner
                 string jsonFileName = $"data_records_{safeProfileName}.json";
 
                 string jsonData = JsonConvert.SerializeObject(DataRecordDictionary.Values, Formatting.Indented);
-                File.WriteAllText(jsonFileName, jsonData);
+                _fileSystem.WriteAllText(jsonFileName, jsonData);
 
                 Log.Information($"JSON data records saved successfully for profile '{profile.ProfileName}'.");
                 hasUnsavedChanges = false; // Reset after save
@@ -189,7 +200,7 @@ namespace BlackoutScanner
                 if (category != null)
                 {
                     string tsvContent = ConvertCategoryRecordsToTsv(categoryRecords, category);
-                    File.WriteAllText(tsvFileName, tsvContent);
+                    _fileSystem.WriteAllText(tsvFileName, tsvContent);
                     Log.Information($"Saved TSV for category '{categoryName}' in profile '{profile.ProfileName}' to {tsvFileName}");
                 }
             }
@@ -295,14 +306,22 @@ namespace BlackoutScanner
             }
         }
 
-        // Add this method to handle record key changes
-        public void UpdateRecordKey(string oldHash, string newHash, DataRecord record)
+        // Implement the interface method to handle record key changes
+        public void UpdateRecordKey(string oldHash, DataRecord updatedRecord, GameProfile profile)
         {
             if (DataRecordDictionary.ContainsKey(oldHash))
             {
-                DataRecordDictionary.Remove(oldHash);
-                DataRecordDictionary[newHash] = record;
-                hasUnsavedChanges = true;
+                string newHash = GenerateDataHash(updatedRecord, profile);
+                if (!string.IsNullOrEmpty(newHash) && !newHash.All(c => c == '-'))
+                {
+                    DataRecordDictionary.Remove(oldHash);
+                    DataRecordDictionary[newHash] = updatedRecord;
+                    hasUnsavedChanges = true;
+                }
+                else
+                {
+                    Log.Warning("Could not generate a valid new hash for the updated record. Record not updated.");
+                }
             }
         }
 
@@ -313,7 +332,7 @@ namespace BlackoutScanner
                 if (invalidDataRecords != null && invalidDataRecords.Count > 0)
                 {
                     string jsonData = JsonConvert.SerializeObject(invalidDataRecords.Values, Formatting.Indented);
-                    File.WriteAllText(invalidJsonFilePath, jsonData);
+                    _fileSystem.WriteAllText(invalidJsonFilePath, jsonData);
                     Log.Information("Invalid data records saved successfully.");
                 }
             }

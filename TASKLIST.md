@@ -73,9 +73,17 @@
 - [x] Update `MainWindow.xaml.cs` to remove any lingering `PlayerData` concepts and use `DataRecord` where necessary.
 
 ### Testing
-- [ ] Create tests.
 - [x] Thoroughly test the profile creation and editing UI.
 - [x] Test the scanning process using a loaded game profile to ensure it works as expected.
+- [x] Extract interfaces for all major components
+- [x] Implement dependency injection (consider using a DI container)
+- [x] Abstract external dependencies (file system, Win32 APIs)
+- [x] Use the Repository pattern for data access
+- [ ] Separate UI from business logic using MVVM properly
+- [ ] Implement a command/query separation for operations
+- [ ] Create testable wrappers for Windows API calls
+- [x] Use IScheduler or similar for time-based operations
+- [ ] Create tests.
 
 ## Version 2.0 Additional Features (Completed)
 - [x] Implement Dark Theme for better UI experience
