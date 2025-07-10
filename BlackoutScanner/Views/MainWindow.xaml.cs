@@ -921,116 +921,123 @@ namespace BlackoutScanner.Views
                             GameProfile = GameProfileManager.ActiveProfile.ProfileName
                         };
 
-                        currentRecordHash = dataManager.GenerateDataHash(tempRecord, GameProfileManager.ActiveProfile);
+                        // Generate hash for the new data
+                        var newHash = dataManager.GenerateDataHash(tempRecord, GameProfileManager.ActiveProfile);
 
-                        // Find which category this data belongs to by checking the visible fields
-                        string? detectedCategory = null;
-                        foreach (var category in GameProfileManager.ActiveProfile.Categories)
+                        // Only proceed with updates if the hash is different (i.e., data changed)
+                        if (newHash != currentRecordHash)
                         {
-                            // Check if all fields from this category are present in the data
-                            bool allFieldsMatch = category.Fields.All(field =>
-                                data.ContainsKey(field.Name));
+                            currentRecordHash = newHash;
 
-                            if (allFieldsMatch && category.Fields.Count > 0)
+                            // Find which category this data belongs to by checking the visible fields
+                            string? detectedCategory = null;
+                            foreach (var category in GameProfileManager.ActiveProfile.Categories)
                             {
-                                detectedCategory = category.Name;
-                                break;
+                                // Check if all fields from this category are present in the data
+                                bool allFieldsMatch = category.Fields.All(field =>
+                                    data.ContainsKey(field.Name));
+
+                                if (allFieldsMatch && category.Fields.Count > 0)
+                                {
+                                    detectedCategory = category.Name;
+                                    break;
+                                }
                             }
-                        }
 
-                        if (!string.IsNullOrEmpty(detectedCategory))
-                        {
-                            tempRecord.Category = detectedCategory;
-
-                            // Add or update the record
-                            dataManager.AddOrUpdateRecord(tempRecord, GameProfileManager.ActiveProfile);
-
-                            // Update the ObservableCollection for real-time UI updates
-                            if (categoryCollections.TryGetValue(detectedCategory, out var collection))
+                            if (!string.IsNullOrEmpty(detectedCategory))
                             {
-                                var hash = dataManager.GenerateDataHash(tempRecord, GameProfileManager.ActiveProfile);
+                                tempRecord.Category = detectedCategory;
 
-                                // Find existing record in the collection
-                                var existingRecord = collection.FirstOrDefault(r =>
-                                    dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == hash);
+                                // Add or update the record
+                                dataManager.AddOrUpdateRecord(tempRecord, GameProfileManager.ActiveProfile);
 
-                                if (existingRecord != null)
+                                // Update the ObservableCollection for real-time UI updates
+                                if (categoryCollections.TryGetValue(detectedCategory, out var collection))
                                 {
-                                    // Update existing record - copy all fields
-                                    foreach (var field in tempRecord.Fields)
+                                    var hash = dataManager.GenerateDataHash(tempRecord, GameProfileManager.ActiveProfile);
+
+                                    // Find existing record in the collection
+                                    var existingRecord = collection.FirstOrDefault(r =>
+                                        dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == hash);
+
+                                    if (existingRecord != null)
                                     {
-                                        existingRecord.Fields[field.Key] = field.Value;
-                                    }
-                                    existingRecord.ScanDate = tempRecord.ScanDate;
-
-                                    // Force UI refresh by removing and re-adding
-                                    var index = collection.IndexOf(existingRecord);
-                                    collection.RemoveAt(index);
-                                    collection.Insert(index, existingRecord);
-                                }
-                                else
-                                {
-                                    // Add new record to the collection
-                                    collection.Insert(0, tempRecord);
-                                }
-
-                                // Mark as having unsaved changes
-                                dataManager.MarkAsUnsaved();
-                                UpdateUnsavedIndicator();
-
-                                // Find the DataGrid for this category to schedule auto-sizing
-                                if (FindName("dataTabControl") is TabControl dataTabControl)
-                                {
-                                    // Check if we're already on the correct tab
-                                    bool alreadyOnCorrectTab = false;
-                                    if (dataTabControl.SelectedItem is TabItem currentTab &&
-                                        currentTab.Header?.ToString() == detectedCategory)
-                                    {
-                                        alreadyOnCorrectTab = true;
-                                        // We're already on the correct tab, still need to get the DataGrid for resizing
-                                        if (currentTab.Content is DataGrid dataGrid)
+                                        // Update existing record - copy all fields
+                                        foreach (var field in tempRecord.Fields)
                                         {
-                                            // Schedule a throttled resize
-                                            if (!dataGridsToResize.Contains(dataGrid))
-                                            {
-                                                dataGridsToResize.Add(dataGrid);
-                                                if (!autoSizeTimer.IsEnabled)
-                                                {
-                                                    autoSizeTimer.Start();
-                                                }
-                                            }
+                                            existingRecord.Fields[field.Key] = field.Value;
                                         }
+                                        existingRecord.ScanDate = tempRecord.ScanDate;
+
+                                        // Force UI refresh by removing and re-adding
+                                        var index = collection.IndexOf(existingRecord);
+                                        collection.RemoveAt(index);
+                                        collection.Insert(index, existingRecord);
+                                    }
+                                    else
+                                    {
+                                        // Add new record to the collection
+                                        collection.Insert(0, tempRecord);
                                     }
 
-                                    // If not on the correct tab, find and switch to it
-                                    if (!alreadyOnCorrectTab)
-                                    {
-                                        foreach (TabItem tab in dataTabControl.Items)
-                                        {
-                                            if (tab.Header?.ToString() == detectedCategory)
-                                            {
-                                                dataTabControl.SelectedItem = tab;
-                                                Log.Information($"Switched to data tab: {detectedCategory}");
+                                    // Mark as having unsaved changes
+                                    dataManager.MarkAsUnsaved();
+                                    UpdateUnsavedIndicator();
 
-                                                if (tab.Content is DataGrid dataGrid)
+                                    // Find the DataGrid for this category to schedule auto-sizing
+                                    if (FindName("dataTabControl") is TabControl dataTabControl)
+                                    {
+                                        // Check if we're already on the correct tab
+                                        bool alreadyOnCorrectTab = false;
+                                        if (dataTabControl.SelectedItem is TabItem currentTab &&
+                                            currentTab.Header?.ToString() == detectedCategory)
+                                        {
+                                            alreadyOnCorrectTab = true;
+                                            // We're already on the correct tab, still need to get the DataGrid for resizing
+                                            if (currentTab.Content is DataGrid dataGrid)
+                                            {
+                                                // Schedule a throttled resize
+                                                if (!dataGridsToResize.Contains(dataGrid))
                                                 {
-                                                    // Schedule a throttled resize
-                                                    if (!dataGridsToResize.Contains(dataGrid))
+                                                    dataGridsToResize.Add(dataGrid);
+                                                    if (!autoSizeTimer.IsEnabled)
                                                     {
-                                                        dataGridsToResize.Add(dataGrid);
-                                                        if (!autoSizeTimer.IsEnabled)
-                                                        {
-                                                            autoSizeTimer.Start();
-                                                        }
+                                                        autoSizeTimer.Start();
                                                     }
                                                 }
-                                                break;
+                                            }
+                                        }
+
+                                        // If not on the correct tab, find and switch to it
+                                        if (!alreadyOnCorrectTab)
+                                        {
+                                            foreach (TabItem tab in dataTabControl.Items)
+                                            {
+                                                if (tab.Header?.ToString() == detectedCategory)
+                                                {
+                                                    dataTabControl.SelectedItem = tab;
+                                                    Log.Information($"Switched to data tab: {detectedCategory}");
+
+                                                    if (tab.Content is DataGrid dataGrid)
+                                                    {
+                                                        // Schedule a throttled resize
+                                                        if (!dataGridsToResize.Contains(dataGrid))
+                                                        {
+                                                            dataGridsToResize.Add(dataGrid);
+                                                            if (!autoSizeTimer.IsEnabled)
+                                                            {
+                                                                autoSizeTimer.Start();
+                                                            }
+                                                        }
+                                                    }
+                                                    break;
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
+                        } // Close the if (newHash != currentRecordHash) block
                     }
 
                     // Update field text boxes with the new data

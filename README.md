@@ -2,6 +2,8 @@
 
 A WPF application for scanning game windows and extracting data using OCR technology, with a focus on profile-based game data capture.
 
+<a href="https://www.buymeacoffee.com/throndir" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;" ></a>
+
 ## Overview
 
 BlackoutScanner is designed to extract information from game windows using OCR (Optical Character Recognition). It allows users to define specific areas of a game's UI to scan and capture data, organizing the information into structured formats. This tool is particularly useful for collecting and analyzing in-game data without needing direct access to the game's internal systems.
