@@ -108,13 +108,6 @@
                                 </StackPanel>
                         </TabItem>
 
-                        <!-- Tab for Reports -->
-                        <TabItem Header="Reports">
-                                <StackPanel Margin="10">
-                                        <TextBlock Text="Reports will be available in a future version."/>
-                                </StackPanel>
-                        </TabItem>
-
                         <!-- Tab for Configuration -->
                         <TabItem Header="Configuration">
                                 <Grid Margin="10">

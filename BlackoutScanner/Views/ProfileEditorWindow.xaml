@@ -127,15 +127,42 @@
                                   AutoGenerateColumns="False"
                                   CanUserAddRows="False"
                                   RowHeight="60"
+                                  VerticalContentAlignment="Center"
                                   Background="{DynamicResource ControlBackgroundBrush}"
                                   Foreground="{DynamicResource ForegroundBrush}">
+                            <DataGrid.Resources>
+                                <!-- Apply editing style to TextBoxes in DataGrid -->
+                                <Style TargetType="TextBox"
+                                        BasedOn="{StaticResource DataGridEditingTextBoxStyle}"/>
+                                <!-- Apply checkbox style to CheckBoxes in DataGrid -->
+                                <Style TargetType="CheckBox"
+                                        BasedOn="{StaticResource DataGridCheckBoxStyle}"/>
+                            </DataGrid.Resources>
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Field Name"
                                                     Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
-                                                    Width="150"/>
+                                                    Width="150">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="VerticalAlignment"
+                                                    Value="Center"/>
+                                            <Setter Property="Margin"
+                                                    Value="5,0"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
                                 <DataGridCheckBoxColumn Header="Key Field"
                                                         Binding="{Binding IsKeyField}"
-                                                        Width="70"/>
+                                                        Width="70">
+                                    <DataGridCheckBoxColumn.ElementStyle>
+                                        <Style TargetType="CheckBox"
+                                                BasedOn="{StaticResource DataGridCheckBoxStyle}"/>
+                                    </DataGridCheckBoxColumn.ElementStyle>
+                                    <DataGridCheckBoxColumn.EditingElementStyle>
+                                        <Style TargetType="CheckBox"
+                                                BasedOn="{StaticResource DataGridCheckBoxStyle}"/>
+                                    </DataGridCheckBoxColumn.EditingElementStyle>
+                                </DataGridCheckBoxColumn>
                                 <DataGridTemplateColumn Header="Preview"
                                                         Width="100">
                                     <DataGridTemplateColumn.CellTemplate>
@@ -156,35 +183,42 @@
                                                         Width="*">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <StackPanel Orientation="Horizontal">
+                                            <StackPanel Orientation="Horizontal"
+                                                    VerticalAlignment="Center">
                                                 <TextBlock Text="X:"
                                                            VerticalAlignment="Center"/>
                                                 <TextBox Text="{Binding Bounds.X}"
                                                          Width="40"
-                                                         Margin="2"/>
+                                                         Margin="2"
+                                                         VerticalAlignment="Center"/>
                                                 <TextBlock Text="Y:"
                                                            VerticalAlignment="Center"/>
                                                 <TextBox Text="{Binding Bounds.Y}"
                                                          Width="40"
-                                                         Margin="2"/>
+                                                         Margin="2"
+                                                         VerticalAlignment="Center"/>
                                                 <TextBlock Text="W:"
                                                            VerticalAlignment="Center"/>
                                                 <TextBox Text="{Binding Bounds.Width}"
                                                          Width="40"
-                                                         Margin="2"/>
+                                                         Margin="2"
+                                                         VerticalAlignment="Center"/>
                                                 <TextBlock Text="H:"
                                                            VerticalAlignment="Center"/>
                                                 <TextBox Text="{Binding Bounds.Height}"
                                                          Width="40"
-                                                         Margin="2"/>
+                                                         Margin="2"
+                                                         VerticalAlignment="Center"/>
                                                 <Button Content="Define"
                                                         Click="DefineFieldAreaButton_Click"
                                                         Tag="{Binding}"
-                                                        Margin="5,0,0,0"/>
+                                                        Margin="5,0,0,0"
+                                                        VerticalAlignment="Center"/>
                                                 <Button Content="Remove"
                                                         Click="RemoveField_Click"
                                                         Tag="{Binding}"
-                                                        Margin="5,0,0,0"/>
+                                                        Margin="5,0,0,0"
+                                                        VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
