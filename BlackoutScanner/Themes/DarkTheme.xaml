@@ -449,24 +449,24 @@
 
         <!-- Add DataGrid TextBox style for editing -->
         <Style TargetType="{x:Type TextBox}"
-                        x:Key="DataGridEditingTextBoxStyle">
+               x:Key="DataGridEditingTextBoxStyle">
                 <Setter Property="Background"
-                                Value="{StaticResource EditingBackgroundBrush}"/>
+                        Value="{StaticResource EditingBackgroundBrush}"/>
                 <Setter Property="Foreground"
-                                Value="{StaticResource EditingForegroundBrush}"/>
+                        Value="{StaticResource EditingForegroundBrush}"/>
                 <Setter Property="BorderThickness"
-                                Value="0"/>
+                        Value="0"/>
                 <Setter Property="Padding"
-                                Value="2"/>
+                        Value="2"/>
         </Style>
 
         <!-- Add DataGrid CheckBox style -->
         <Style TargetType="CheckBox"
-                        x:Key="DataGridCheckBoxStyle">
+               x:Key="DataGridCheckBoxStyle">
                 <Setter Property="HorizontalAlignment"
-                                Value="Center"/>
+                        Value="Center"/>
                 <Setter Property="VerticalAlignment"
-                                Value="Center"/>
+                        Value="Center"/>
                 <Setter Property="Template">
                         <Setter.Value>
                                 <ControlTemplate TargetType="CheckBox">
