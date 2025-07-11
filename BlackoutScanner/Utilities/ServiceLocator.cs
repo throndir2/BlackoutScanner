@@ -39,11 +39,14 @@ namespace BlackoutScanner.Utilities
             services.AddSingleton<IProfileRepository, ProfileRepository>();
             services.AddSingleton<IDataRecordRepository, DataRecordRepository>();
 
-            // Register Core Services
-            services.AddSingleton<IScreenCapture, ScreenCapture>();
-            services.AddSingleton<IOCRProcessor, OCRProcessor>();
+            // Register Core Services - Order matters here!
+            // Register fast-initializing services first
             services.AddSingleton<IDataManager, DataManager>();
             services.AddSingleton<IGameProfileManager, GameProfileManager>();
+            services.AddSingleton<IScreenCapture, ScreenCapture>();
+
+            // Register slow-initializing OCR-related services last
+            services.AddSingleton<IOCRProcessor, OCRProcessor>();
             services.AddSingleton<IScanner, Scanner>();
 
             _serviceProvider = services.BuildServiceProvider();

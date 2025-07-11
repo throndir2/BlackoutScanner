@@ -98,6 +98,21 @@
                                                                   VerticalAlignment="Center"/>
                                         </Border>
                                         <ControlTemplate.Triggers>
+                                                <Trigger Property="IsEnabled"
+                                                         Value="False">
+                                                        <Setter Property="Background"
+                                                                Value="#FF4A4A4D"/>
+                                                        <!-- Dark grey background -->
+                                                        <Setter Property="Foreground"
+                                                                Value="#FF7F7F7F"/>
+                                                        <!-- Lighter grey text -->
+                                                        <Setter Property="BorderBrush"
+                                                                Value="#FF4A4A4D"/>
+                                                        <!-- Match background -->
+                                                        <Setter Property="Opacity"
+                                                                Value="0.7"/>
+                                                        <!-- Slightly transparent -->
+                                                </Trigger>
                                                 <Trigger Property="IsMouseOver"
                                                          Value="True">
                                                         <Setter Property="Background"
