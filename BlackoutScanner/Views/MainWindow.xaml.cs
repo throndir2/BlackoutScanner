@@ -251,8 +251,18 @@ namespace BlackoutScanner.Views
                     EnableRowVirtualization = true, // Enable virtualization for performance
                     EnableColumnVirtualization = true, // Enable column virtualization
                     VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                    HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    VerticalContentAlignment = VerticalAlignment.Center // Add vertical alignment
                 };
+
+                // Add resources for TextBox and CheckBox styling
+                var editingStyle = new Style(typeof(TextBox));
+                editingStyle.BasedOn = Application.Current.FindResource("DataGridEditingTextBoxStyle") as Style;
+                dataGrid.Resources.Add(typeof(TextBox), editingStyle);
+
+                var checkboxStyle = new Style(typeof(CheckBox));
+                checkboxStyle.BasedOn = Application.Current.FindResource("DataGridCheckBoxStyle") as Style;
+                dataGrid.Resources.Add(typeof(CheckBox), checkboxStyle);
 
                 // Add event handlers for cell editing
                 dataGrid.CellEditEnding += DataGrid_CellEditEnding;
