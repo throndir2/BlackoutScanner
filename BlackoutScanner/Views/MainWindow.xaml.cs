@@ -86,7 +86,11 @@ namespace BlackoutScanner.Views
             // Set up logging for UI
             SetupLoggingToUI();
 
+            // Disable scan button until OCR is initialized
             scanButton.IsEnabled = false;
+
+            // Add a status indicator to show OCR is loading
+            AppendLogMessage("Loading profiles and initializing application...");
 
             // Initialize the auto-size timer for throttled column resizing
             autoSizeTimer = new System.Windows.Threading.DispatcherTimer();
@@ -141,29 +145,19 @@ namespace BlackoutScanner.Views
         {
             try
             {
-                Dispatcher.Invoke(() => AppendLogMessage("Initializing OCR components..."));
+                Dispatcher.Invoke(() => AppendLogMessage("Initializing application components..."));
 
-                // Get services from the ServiceLocator
+                // Get non-OCR services from the ServiceLocator
                 dataManager = ServiceLocator.GetService<IDataManager>();
-                ocrProcessor = ServiceLocator.GetService<IOCRProcessor>();
                 GameProfileManager = ServiceLocator.GetService<IGameProfileManager>();
-                scanner = ServiceLocator.GetService<IScanner>();
 
                 // Load debug settings
                 LoadDebugSettings();
 
-                // Load OCR cache
-                var cacheData = LoadOcrResultsCache();
-                ocrProcessor.LoadCache(cacheData);
-
-                // Update the Scanner with our debug settings
-                scanner.UpdateDebugSettings(saveDebugImages, verboseLogging, debugImagesFolder);
-                SubscribeToScannerEvents();
-
+                // Load profiles FIRST - this is fast
                 Dispatcher.Invoke(() =>
                 {
-                    Log.Information("OCR components initialized successfully.");
-                    scanButton.IsEnabled = true;
+                    LoadProfilesIntoView();
 
                     // Check if we have any profiles
                     if (GameProfileManager.Profiles.Any())
@@ -195,14 +189,47 @@ namespace BlackoutScanner.Views
                     {
                         Log.Information("No game profiles found. Please create one in the Configuration tab.");
                     }
+                });
 
-                    LoadProfilesIntoView();
+                // Initialize OCR components asynchronously AFTER profiles are loaded
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        Dispatcher.Invoke(() => AppendLogMessage("Initializing OCR components in background..."));
+
+                        // Get OCR processor - this is where the slow initialization happens
+                        ocrProcessor = ServiceLocator.GetService<IOCRProcessor>();
+                        scanner = ServiceLocator.GetService<IScanner>();
+
+                        // Load OCR cache
+                        var cacheData = LoadOcrResultsCache();
+                        ocrProcessor.LoadCache(cacheData);
+
+                        // Update the Scanner with our debug settings
+                        scanner.UpdateDebugSettings(saveDebugImages, verboseLogging, debugImagesFolder);
+                        SubscribeToScannerEvents();
+
+                        Dispatcher.Invoke(() =>
+                        {
+                            Log.Information("OCR components initialized successfully.");
+                            scanButton.IsEnabled = true;
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            AppendLogMessage($"OCR initialization failed: {ex.Message}");
+                            Log.Error(ex, "Failed to initialize OCR components.");
+                        });
+                    }
                 });
             }
             catch (Exception ex)
             {
                 Dispatcher.Invoke(() => AppendLogMessage($"Initialization failed: {ex.Message}"));
-                Log.Error(ex, "Failed to initialize OCR components.");
+                Log.Error(ex, "Failed to initialize application components.");
             }
         }
 
@@ -873,10 +900,17 @@ namespace BlackoutScanner.Views
 
         private void SubscribeToScannerEvents()
         {
-            scanner.DataUpdated += HandleDataUpdated;
-            scanner.ImageUpdated += HandleImageUpdated;
-            scanner.ScanDateUpdated += UpdateScanDate;
-            scanner.CategoryScanning += HandleCategoryScanning;
+            if (scanner != null)
+            {
+                scanner.DataUpdated += HandleDataUpdated;
+                scanner.ImageUpdated += HandleImageUpdated;
+                scanner.ScanDateUpdated += UpdateScanDate;
+                scanner.CategoryScanning += HandleCategoryScanning;
+            }
+            else
+            {
+                Log.Error("Cannot subscribe to scanner events: Scanner is null");
+            }
         }
 
         private void HandleCategoryScanning(string categoryName)
@@ -1094,10 +1128,18 @@ namespace BlackoutScanner.Views
 
         private void ScanButton_Click(object sender, RoutedEventArgs e)
         {
+            // If OCR is not initialized yet, show a message
+            if (scanner == null || ocrProcessor == null)
+            {
+                MessageBox.Show("OCR engine is still initializing. Please wait a moment and try again.",
+                                "OCR Not Ready", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             if (isScanning)
             {
                 // Stop scanning
-                scanner?.StopScanning();
+                scanner.StopScanning();
 
                 if (FindName("scanButton") is Button scanButton)
                 {
