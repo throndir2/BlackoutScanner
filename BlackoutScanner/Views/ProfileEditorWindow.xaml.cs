@@ -30,6 +30,7 @@ namespace BlackoutScanner.Views
             if (profile == null)
             {
                 // Creating a new profile
+                Log.Information("ProfileEditorWindow: Creating new profile");
                 Profile = new GameProfile
                 {
                     ProfileName = "New Game Profile",
@@ -41,10 +42,31 @@ namespace BlackoutScanner.Views
             else
             {
                 // Editing an existing profile
+                Log.Information($"ProfileEditorWindow: Editing existing profile '{profile.ProfileName}'");
+
+                // Log original state
+                foreach (var category in profile.Categories)
+                {
+                    foreach (var field in category.Fields)
+                    {
+                        Log.Information($"ProfileEditorWindow: Original - Category: '{category.Name}', Field: '{field.Name}', IsKeyField: {field.IsKeyField}");
+                    }
+                }
+
                 // Create a deep copy to avoid modifying the original until save
                 var json = JsonConvert.SerializeObject(profile);
                 Profile = JsonConvert.DeserializeObject<GameProfile>(json)!;
                 Title = $"Edit Profile - {Profile.ProfileName}";
+
+                // Log deep copy state
+                foreach (var category in Profile.Categories)
+                {
+                    foreach (var field in category.Fields)
+                    {
+                        Log.Information($"ProfileEditorWindow: Deep copy - Category: '{category.Name}', Field: '{field.Name}', IsKeyField: {field.IsKeyField}");
+                    }
+                }
+
                 Log.Information("Editing profile for {GameTitle}", Profile.ProfileName);
 
                 // Convert RelativeBounds to Bounds for UI display
@@ -280,9 +302,64 @@ namespace BlackoutScanner.Views
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
+            Log.Information($"Save_Click: Starting save for profile '{profileNameTextBox.Text}'");
+
             Profile.ProfileName = profileNameTextBox.Text;
             Profile.GameWindowTitle = gameTitleTextBox.Text;
-            Profile.Categories = new List<CaptureCategory>(categories);
+
+            // IMPORTANT: Don't just assign the categories collection
+            // We need to ensure we're properly capturing all field changes including IsKeyField
+            Log.Information($"Save_Click: Profile has {Profile.Categories.Count} categories before clearing");
+            Profile.Categories.Clear();
+
+            // Deep copy each category to ensure all field changes are captured
+            foreach (var category in categories)
+            {
+                Log.Information($"Save_Click: Processing category '{category.Name}' with {category.Fields.Count} fields");
+
+                // Create a new category with updated values
+                var updatedCategory = new CaptureCategory
+                {
+                    Name = category.Name,
+                    RelativeBounds = category.RelativeBounds,
+                    Bounds = category.Bounds
+                };
+
+                // Set the preview image separately since it's not part of the constructor
+                updatedCategory.PreviewImage = category.PreviewImage;
+
+                // Copy all fields with their current values
+                foreach (var field in category.Fields)
+                {
+                    Log.Information($"Save_Click: Field '{field.Name}' - IsKeyField: {field.IsKeyField}, Bounds: {field.RelativeBounds}");
+
+                    var newField = new CaptureField
+                    {
+                        Name = field.Name,
+                        IsKeyField = field.IsKeyField, // This is the critical part that was being lost
+                        RelativeBounds = field.RelativeBounds,
+                        Bounds = field.Bounds
+                    };
+
+                    // Set the preview image separately
+                    newField.PreviewImage = field.PreviewImage;
+
+                    updatedCategory.Fields.Add(newField);
+                }
+
+                Profile.Categories.Add(updatedCategory);
+            }
+
+            Log.Information($"Save_Click: Profile now has {Profile.Categories.Count} categories after update");
+
+            // Log final state
+            foreach (var cat in Profile.Categories)
+            {
+                foreach (var field in cat.Fields)
+                {
+                    Log.Information($"Save_Click: Final state - Category: '{cat.Name}', Field: '{field.Name}', IsKeyField: {field.IsKeyField}");
+                }
+            }
 
             var gameWindowRect = screenCapture.GetWindowRectangle(Profile.GameWindowTitle);
             if (gameWindowRect.IsEmpty)
@@ -365,6 +442,32 @@ namespace BlackoutScanner.Views
             else
             {
                 return FindParent<T>(parentObject);
+            }
+        }
+
+        // Event handler for DataGrid cell editing
+        private void DataGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+        {
+            if (e.Column.Header.ToString() == "Key Field" && e.EditingElement is CheckBox checkBox)
+            {
+                var field = e.Row.Item as CaptureField;
+                if (field != null)
+                {
+                    Log.Information($"DataGrid_CellEditEnding: Field '{field.Name}' IsKeyField changing to: {checkBox.IsChecked}");
+
+                    // Force the update by explicitly setting the property
+                    field.IsKeyField = checkBox.IsChecked ?? false;
+                }
+            }
+        }
+
+        // Event handler to force commit when cell changes
+        private void DataGrid_CurrentCellChanged(object sender, EventArgs e)
+        {
+            if (sender is DataGrid grid && grid.CurrentCell.Column is DataGridCheckBoxColumn)
+            {
+                grid.CommitEdit(DataGridEditingUnit.Row, true);
+                Log.Debug("DataGrid_CurrentCellChanged: Committed edit for checkbox column");
             }
         }
     }

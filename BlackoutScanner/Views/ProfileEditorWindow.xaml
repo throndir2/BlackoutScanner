@@ -128,15 +128,17 @@
                                   CanUserAddRows="False"
                                   RowHeight="60"
                                   VerticalContentAlignment="Center"
+                                  CellEditEnding="DataGrid_CellEditEnding"
+                                  CurrentCellChanged="DataGrid_CurrentCellChanged"
                                   Background="{DynamicResource ControlBackgroundBrush}"
                                   Foreground="{DynamicResource ForegroundBrush}">
                             <DataGrid.Resources>
                                 <!-- Apply editing style to TextBoxes in DataGrid -->
                                 <Style TargetType="TextBox"
-                                        BasedOn="{StaticResource DataGridEditingTextBoxStyle}"/>
+                                       BasedOn="{StaticResource DataGridEditingTextBoxStyle}"/>
                                 <!-- Apply checkbox style to CheckBoxes in DataGrid -->
                                 <Style TargetType="CheckBox"
-                                        BasedOn="{StaticResource DataGridCheckBoxStyle}"/>
+                                       BasedOn="{StaticResource DataGridCheckBoxStyle}"/>
                             </DataGrid.Resources>
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Field Name"
@@ -150,17 +152,35 @@
                                                     Value="5,0"/>
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>
+                                    <DataGridTextColumn.EditingElementStyle>
+                                        <Style TargetType="TextBox">
+                                            <Setter Property="Background"
+                                                    Value="{DynamicResource EditingBackgroundBrush}"/>
+                                            <Setter Property="Foreground"
+                                                    Value="{DynamicResource EditingForegroundBrush}"/>
+                                        </Style>
+                                    </DataGridTextColumn.EditingElementStyle>
                                 </DataGridTextColumn>
                                 <DataGridCheckBoxColumn Header="Key Field"
-                                                        Binding="{Binding IsKeyField}"
+                                                        Binding="{Binding IsKeyField, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                         Width="70">
                                     <DataGridCheckBoxColumn.ElementStyle>
                                         <Style TargetType="CheckBox"
-                                                BasedOn="{StaticResource DataGridCheckBoxStyle}"/>
+                                               BasedOn="{StaticResource DataGridCheckBoxStyle}">
+                                            <Setter Property="HorizontalAlignment"
+                                                    Value="Center"/>
+                                            <Setter Property="VerticalAlignment"
+                                                    Value="Center"/>
+                                        </Style>
                                     </DataGridCheckBoxColumn.ElementStyle>
                                     <DataGridCheckBoxColumn.EditingElementStyle>
                                         <Style TargetType="CheckBox"
-                                                BasedOn="{StaticResource DataGridCheckBoxStyle}"/>
+                                               BasedOn="{StaticResource DataGridCheckBoxStyle}">
+                                            <Setter Property="HorizontalAlignment"
+                                                    Value="Center"/>
+                                            <Setter Property="VerticalAlignment"
+                                                    Value="Center"/>
+                                        </Style>
                                     </DataGridCheckBoxColumn.EditingElementStyle>
                                 </DataGridCheckBoxColumn>
                                 <DataGridTemplateColumn Header="Preview"
@@ -184,7 +204,7 @@
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal"
-                                                    VerticalAlignment="Center">
+                                                        VerticalAlignment="Center">
                                                 <TextBlock Text="X:"
                                                            VerticalAlignment="Center"/>
                                                 <TextBox Text="{Binding Bounds.X}"

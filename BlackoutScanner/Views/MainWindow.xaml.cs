@@ -666,6 +666,14 @@ namespace BlackoutScanner.Views
                     {
                         GameProfileManager.SetActiveProfile(newProfile);
                         SetupDynamicUI(newProfile);
+
+                        // IMPORTANT: Load data records and set up the Data tab UI
+                        if (dataManager != null)
+                        {
+                            dataManager.LoadDataRecordsWithProfile(newProfile);
+                            SetupDynamicDataUI(newProfile);
+                        }
+
                         AppendLogMessage($"New profile '{newProfile.ProfileName}' created and set as active.");
                     }
                     else
@@ -696,14 +704,25 @@ namespace BlackoutScanner.Views
                     if (GameProfileManager != null)
                     {
                         GameProfileManager.SaveProfile(editorWindow.Profile);
+
+                        // Force reload profiles from disk to ensure all changes are properly reflected
+                        GameProfileManager.LoadProfiles();
                         LoadProfilesIntoView();
 
                         // If we edited the active profile, update the UI
                         if (isActiveProfile)
                         {
-                            // Update the active profile reference
-                            GameProfileManager.SetActiveProfile(editorWindow.Profile);
-                            SetupDynamicUI(editorWindow.Profile);
+                            // Update the active profile reference - use the refreshed instance from profiles list
+                            var refreshedProfile = GameProfileManager.Profiles.FirstOrDefault(p => p.ProfileName == editorWindow.Profile.ProfileName);
+                            if (refreshedProfile != null)
+                            {
+                                GameProfileManager.SetActiveProfile(refreshedProfile);
+                                SetupDynamicUI(refreshedProfile);
+
+                                // Reload data UI to reflect any changes in key fields
+                                dataManager?.LoadDataRecordsWithProfile(refreshedProfile);
+                                SetupDynamicDataUI(refreshedProfile);
+                            }
 
                             // IMPORTANT: If scanner is currently scanning, we need to restart it with the updated profile
                             if (isScanning && scanner != null && GameProfileManager.ActiveProfile != null)

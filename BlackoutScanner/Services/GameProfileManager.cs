@@ -54,6 +54,15 @@ namespace BlackoutScanner
                     var profile = JsonConvert.DeserializeObject<GameProfile>(json);
                     if (profile != null)
                     {
+                        // Log field states
+                        foreach (var category in profile.Categories)
+                        {
+                            foreach (var field in category.Fields)
+                            {
+                                Log.Information($"LoadProfiles: Category: '{category.Name}', Field: '{field.Name}', IsKeyField: {field.IsKeyField}");
+                            }
+                        }
+
                         Profiles.Add(profile);
                         Log.Information($"GameProfileManager: Successfully loaded profile '{profile.ProfileName}' with window title '{profile.GameWindowTitle}'");
                     }
@@ -119,28 +128,64 @@ namespace BlackoutScanner
 
         public void SaveProfile(GameProfile profile)
         {
+            Log.Information($"SaveProfile: Starting save for profile '{profile.ProfileName}'");
+
             var filePath = _fileSystem.Combine(profilesDirectory, $"{profile.ProfileName}.json");
+
+            // Log the profile state before serialization
+            foreach (var category in profile.Categories)
+            {
+                foreach (var field in category.Fields)
+                {
+                    Log.Information($"SaveProfile: Before save - Category: '{category.Name}', Field: '{field.Name}', IsKeyField: {field.IsKeyField}");
+                }
+            }
+
             var json = JsonConvert.SerializeObject(profile, Formatting.Indented);
+
+            // Log a snippet of the JSON to verify serialization
+            var jsonPreview = json.Length > 1000 ? json.Substring(0, 1000) + "..." : json;
+            Log.Debug($"SaveProfile: JSON preview:\n{jsonPreview}");
+
             _fileSystem.WriteAllText(filePath, json);
 
             // Update existing profile or add new one
-            var existingProfile = Profiles.FirstOrDefault(p => p.ProfileName == profile.ProfileName);
-            if (existingProfile != null)
+            var existingProfileIndex = Profiles.FindIndex(p => p.ProfileName == profile.ProfileName);
+
+            if (existingProfileIndex != -1)
             {
-                Profiles[Profiles.IndexOf(existingProfile)] = profile;
+                Log.Information($"SaveProfile: Updating existing profile at index {existingProfileIndex}");
+
+                // Create a fresh deserialized copy to ensure all references are updated
+                var updatedProfile = JsonConvert.DeserializeObject<GameProfile>(json);
+                if (updatedProfile != null)
+                {
+                    // Log the deserialized state
+                    foreach (var category in updatedProfile.Categories)
+                    {
+                        foreach (var field in category.Fields)
+                        {
+                            Log.Information($"SaveProfile: After deserialize - Category: '{category.Name}', Field: '{field.Name}', IsKeyField: {field.IsKeyField}");
+                        }
+                    }
+
+                    Profiles[existingProfileIndex] = updatedProfile;
+
+                    // If this was the active profile, update the reference
+                    if (ActiveProfile != null && ActiveProfile.ProfileName == profile.ProfileName)
+                    {
+                        Log.Information($"SaveProfile: Updating active profile reference");
+                        ActiveProfile = updatedProfile;
+                    }
+                }
             }
             else
             {
+                Log.Information($"SaveProfile: Adding new profile to list");
                 Profiles.Add(profile);
             }
 
-            // If this was the active profile, update the reference
-            if (ActiveProfile != null && ActiveProfile.ProfileName == profile.ProfileName)
-            {
-                ActiveProfile = profile;
-            }
-
-            Log.Information($"GameProfileManager: Saved profile '{profile.ProfileName}' to {filePath}");
+            Log.Information($"SaveProfile: Saved profile '{profile.ProfileName}' to {filePath}");
         }
 
         public void DeleteProfile(GameProfile profile)
