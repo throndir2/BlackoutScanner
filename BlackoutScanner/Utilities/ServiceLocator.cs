@@ -41,6 +41,7 @@ namespace BlackoutScanner.Utilities
 
             // Register Core Services - Order matters here!
             // Register fast-initializing services first
+            services.AddSingleton<ISettingsManager, SettingsManager>();
             services.AddSingleton<IDataManager, DataManager>();
             services.AddSingleton<IGameProfileManager, GameProfileManager>();
             services.AddSingleton<IScreenCapture, ScreenCapture>();

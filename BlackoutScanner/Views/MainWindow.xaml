@@ -116,6 +116,7 @@
                                                 <RowDefinition Height="*"/>
                                                 <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
                                         <!-- Game Profiles Section -->
@@ -255,6 +256,44 @@
                                                                 Click="OpenDebugFolder_Click"
                                                                 Margin="0,10,0,5"/>
                                                 </Grid>
+                                        </GroupBox>
+
+                                        <!-- Export Settings -->
+                                        <GroupBox Grid.Row="4"
+                                                  Header="Export Settings"
+                                                  Margin="5">
+                                                <StackPanel>
+                                                        <Label Content="Export Folder:"/>
+                                                        <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <TextBox x:Name="exportFolderTextBox"
+                                                                         Grid.Column="0"
+                                                                         Margin="5"
+                                                                         Text="{Binding Path=SettingsManager.Settings.ExportFolder, Mode=TwoWay}"/>
+
+                                                                <Button Grid.Column="1"
+                                                                        Content="Browse..."
+                                                                        Margin="5"
+                                                                        Width="80"
+                                                                        Click="BrowseExportFolder_Click"/>
+
+                                                                <Button Grid.Column="2"
+                                                                        Content="Open Folder"
+                                                                        Margin="5"
+                                                                        Click="OpenExportFolder_Click"/>
+                                                        </Grid>
+
+                                                        <Button Content="Save Settings"
+                                                                Margin="5"
+                                                                Width="120"
+                                                                HorizontalAlignment="Left"
+                                                                Click="SaveSettings_Click"/>
+                                                </StackPanel>
                                         </GroupBox>
                                 </Grid>
                         </TabItem>

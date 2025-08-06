@@ -20,6 +20,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using WinImage = System.Windows.Controls.Image;
 using Microsoft.Win32; // For SaveFileDialog/OpenFileDialog
+using System.Diagnostics; // For Process.Start
 
 namespace BlackoutScanner.Views
 {
@@ -30,6 +31,7 @@ namespace BlackoutScanner.Views
         private IDataManager? dataManager;
         private IOCRProcessor? ocrProcessor;
         private IGameProfileManager? _gameProfileManager;
+        private ISettingsManager? _settingsManager;
 
         public IGameProfileManager? GameProfileManager
         {
@@ -37,6 +39,16 @@ namespace BlackoutScanner.Views
             private set
             {
                 _gameProfileManager = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public ISettingsManager? SettingsManager
+        {
+            get => _settingsManager;
+            private set
+            {
+                _settingsManager = value;
                 OnPropertyChanged();
             }
         }
@@ -147,12 +159,13 @@ namespace BlackoutScanner.Views
             {
                 Dispatcher.Invoke(() => AppendLogMessage("Initializing application components..."));
 
-                // Get non-OCR services from the ServiceLocator
+                // Get services from the ServiceLocator
                 dataManager = ServiceLocator.GetService<IDataManager>();
                 GameProfileManager = ServiceLocator.GetService<IGameProfileManager>();
+                SettingsManager = ServiceLocator.GetService<ISettingsManager>();
 
-                // Load debug settings
-                LoadDebugSettings();
+                // Load debug settings from SettingsManager instead
+                LoadDebugSettingsFromManager();
 
                 // Load profiles FIRST - this is fast
                 Dispatcher.Invoke(() =>
@@ -1272,16 +1285,33 @@ namespace BlackoutScanner.Views
             }
         }
 
-        private void LoadDebugSettings()
+        private void LoadDebugSettingsFromManager()
         {
-            // Nothing to do here for now - we'll use the default values already set in the fields
-            Log.Debug($"Debug settings initialized: saveImages={saveDebugImages}, verbose={verboseLogging}, folder={debugImagesFolder}");
+            if (SettingsManager != null)
+            {
+                saveDebugImages = SettingsManager.Settings.SaveDebugImages;
+                verboseLogging = SettingsManager.Settings.VerboseLogging;
+                debugImagesFolder = SettingsManager.Settings.DebugImagesFolder;
+
+                Log.Debug($"Debug settings loaded from SettingsManager: saveImages={saveDebugImages}, verbose={verboseLogging}, folder={debugImagesFolder}");
+            }
         }
 
         private void SaveDebugSettings()
         {
             try
             {
+                if (SettingsManager != null)
+                {
+                    // Update settings in the manager
+                    SettingsManager.Settings.SaveDebugImages = saveDebugImages;
+                    SettingsManager.Settings.VerboseLogging = verboseLogging;
+                    SettingsManager.Settings.DebugImagesFolder = debugImagesFolder;
+
+                    // Save to disk
+                    SettingsManager.SaveSettings();
+                }
+
                 // Ensure the debug images folder exists
                 if (saveDebugImages && !string.IsNullOrEmpty(debugImagesFolder))
                 {
@@ -1299,6 +1329,68 @@ namespace BlackoutScanner.Views
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to save debug settings");
+            }
+        }
+
+        private void BrowseExportFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var openFileDialog = new OpenFileDialog
+            {
+                Title = "Select folder for exports",
+                CheckFileExists = false,
+                CheckPathExists = true,
+                FileName = "Select this folder",
+                Filter = "Folders|*.none",
+                ValidateNames = false
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                string? selectedPath = Path.GetDirectoryName(openFileDialog.FileName);
+                if (!string.IsNullOrEmpty(selectedPath) && SettingsManager != null)
+                {
+                    SettingsManager.Settings.ExportFolder = selectedPath;
+                    Log.Information($"Export folder set to: {selectedPath}");
+                }
+            }
+        }
+
+        private void OpenExportFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (SettingsManager != null)
+                {
+                    var exportPath = SettingsManager.GetFullExportPath();
+
+                    // Ensure the folder exists
+                    if (!Directory.Exists(exportPath))
+                    {
+                        Directory.CreateDirectory(exportPath);
+                    }
+
+                    // Open the folder in Windows Explorer
+                    var startInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = exportPath,
+                        UseShellExecute = true
+                    };
+                    System.Diagnostics.Process.Start(startInfo);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to open export folder");
+                MessageBox.Show($"Failed to open export folder: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void SaveSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (SettingsManager != null)
+            {
+                SettingsManager.SaveSettings();
+                MessageBox.Show("Settings saved successfully!", "Settings Saved", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 
@@ -1428,9 +1520,11 @@ namespace BlackoutScanner.Views
 
         private void ExportTsv_Click(object sender, RoutedEventArgs e)
         {
-            if (GameProfileManager?.ActiveProfile != null && dataManager != null)
+            if (GameProfileManager?.ActiveProfile != null && dataManager != null && SettingsManager != null)
             {
-                dataManager.SaveDataRecordsAsTsv(GameProfileManager.ActiveProfile);
+                // Pass the export path to the save method
+                var exportPath = SettingsManager.GetFullExportPath();
+                dataManager.SaveDataRecordsAsTsv(GameProfileManager.ActiveProfile, exportPath);
 
                 // Show a message with information about the exported files
                 var safeProfileName = GetSafeFileName(GameProfileManager.ActiveProfile.ProfileName);
@@ -1442,6 +1536,7 @@ namespace BlackoutScanner.Views
 
                 var message = $"TSV data exported successfully!\n\n";
                 message += $"Profile: {GameProfileManager.ActiveProfile.ProfileName}\n";
+                message += $"Export folder: {exportPath}\n";
                 message += $"Categories exported: {string.Join(", ", categories)}\n\n";
                 message += $"Files created:\n";
 
@@ -1462,14 +1557,16 @@ namespace BlackoutScanner.Views
 
         private void ExportJson_Click(object sender, RoutedEventArgs e)
         {
-            if (GameProfileManager?.ActiveProfile != null && dataManager != null)
+            if (GameProfileManager?.ActiveProfile != null && dataManager != null && SettingsManager != null)
             {
-                dataManager.SaveDataRecordsAsJson(GameProfileManager.ActiveProfile);
+                // Pass the export path to the save method
+                var exportPath = SettingsManager.GetFullExportPath();
+                dataManager.SaveDataRecordsAsJson(GameProfileManager.ActiveProfile, exportPath);
 
                 var safeProfileName = GetSafeFileName(GameProfileManager.ActiveProfile.ProfileName);
                 var fileName = $"data_records_{safeProfileName}.json";
 
-                MessageBox.Show($"JSON data exported successfully!\n\nFile: {fileName}", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show($"JSON data exported successfully!\n\nFile: {Path.Combine(exportPath, fileName)}", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
                 Log.Information($"JSON export completed to {fileName}");
             }
             else

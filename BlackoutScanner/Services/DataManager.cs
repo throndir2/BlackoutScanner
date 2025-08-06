@@ -134,18 +134,25 @@ namespace BlackoutScanner
             hasUnsavedChanges = true;
         }
 
-        public void SaveDataRecordsAsJson(GameProfile profile)
+        public void SaveDataRecordsAsJson(GameProfile profile, string? exportPath = null)
         {
             try
             {
                 // Generate filename with profile name
                 string safeProfileName = GetSafeFileName(profile.ProfileName);
-                string jsonFileName = $"data_records_{safeProfileName}.json";
+
+                // Use the export path if provided
+                string directory = exportPath ?? Directory.GetCurrentDirectory();
+
+                // Ensure the directory exists
+                Directory.CreateDirectory(directory);
+
+                string jsonFileName = Path.Combine(directory, $"data_records_{safeProfileName}.json");
 
                 string jsonData = JsonConvert.SerializeObject(DataRecordDictionary.Values, Formatting.Indented);
                 _fileSystem.WriteAllText(jsonFileName, jsonData);
 
-                Log.Information($"JSON data records saved successfully for profile '{profile.ProfileName}'.");
+                Log.Information($"JSON data records saved successfully for profile '{profile.ProfileName}' to {jsonFileName}.");
                 hasUnsavedChanges = false; // Reset after save
             }
             catch (Exception ex)
@@ -154,12 +161,12 @@ namespace BlackoutScanner
             }
         }
 
-        public void SaveDataRecordsAsTsv(GameProfile profile)
+        public void SaveDataRecordsAsTsv(GameProfile profile, string? exportPath = null)
         {
             try
             {
                 // Generate TSV files per category
-                SaveTsvFilesByCategory(DataRecordDictionary.Values.ToList(), profile);
+                SaveTsvFilesByCategory(DataRecordDictionary.Values.ToList(), profile, exportPath);
 
                 Log.Information($"TSV data records saved successfully for profile '{profile.ProfileName}'.");
                 hasUnsavedChanges = false; // Reset after save
@@ -171,14 +178,20 @@ namespace BlackoutScanner
         }
 
         // Keep the original method for backward compatibility or for saving both at once (e.g., on app close)
-        public void SaveDataRecords(GameProfile profile)
+        public void SaveDataRecords(GameProfile profile, string? exportPath = null)
         {
-            SaveDataRecordsAsJson(profile);
-            SaveDataRecordsAsTsv(profile);
+            SaveDataRecordsAsJson(profile, exportPath);
+            SaveDataRecordsAsTsv(profile, exportPath);
         }
 
-        private void SaveTsvFilesByCategory(List<DataRecord> dataList, GameProfile profile)
+        private void SaveTsvFilesByCategory(List<DataRecord> dataList, GameProfile profile, string? exportPath = null)
         {
+            // Use the export path if provided
+            string directory = exportPath ?? Directory.GetCurrentDirectory();
+
+            // Ensure the directory exists
+            Directory.CreateDirectory(directory);
+
             // Group records by category
             var recordsByCategory = dataList.GroupBy(r => r.Category);
 
@@ -193,7 +206,7 @@ namespace BlackoutScanner
                 // Generate filename with profile and category name
                 string safeProfileName = GetSafeFileName(profile.ProfileName);
                 string safeCategoryName = GetSafeFileName(categoryName);
-                string tsvFileName = $"data_records_{safeProfileName}_{safeCategoryName}.tsv";
+                string tsvFileName = Path.Combine(directory, $"data_records_{safeProfileName}_{safeCategoryName}.tsv");
 
                 // Find the category definition to get field order
                 var category = profile.Categories.FirstOrDefault(c => c.Name == categoryName);
