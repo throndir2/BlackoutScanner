@@ -8,6 +8,12 @@ using Newtonsoft.Json;
 
 namespace BlackoutScanner.Models
 {
+    public enum CategoryComparisonMode
+    {
+        Text,
+        Image
+    }
+
     public class CaptureCategory : INotifyPropertyChanged
     {
         private string _name = string.Empty;
@@ -21,6 +27,45 @@ namespace BlackoutScanner.Models
                     _name = value;
                     OnPropertyChanged();
                 }
+            }
+        }
+
+        private CategoryComparisonMode _comparisonMode = CategoryComparisonMode.Text;
+        public CategoryComparisonMode ComparisonMode
+        {
+            get => _comparisonMode;
+            set
+            {
+                if (_comparisonMode != value)
+                {
+                    _comparisonMode = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _textToCompare = string.Empty;
+        public string TextToCompare
+        {
+            get => _textToCompare;
+            set
+            {
+                if (_textToCompare != value)
+                {
+                    _textToCompare = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private byte[]? _previewImageData;
+        public byte[]? PreviewImageData
+        {
+            get => _previewImageData;
+            set
+            {
+                _previewImageData = value;
+                OnPropertyChanged();
             }
         }
 

@@ -35,27 +35,42 @@ namespace BlackoutScanner.Services
         {
             try
             {
+                Log.Information("[SettingsManager.LoadSettings] Starting to load settings...");
+
                 if (File.Exists(_settingsFilePath))
                 {
                     var json = File.ReadAllText(_settingsFilePath);
+                    Log.Debug($"[SettingsManager.LoadSettings] Raw JSON: {json}");
+
                     var loadedSettings = JsonConvert.DeserializeObject<AppSettings>(json);
                     if (loadedSettings != null)
                     {
+                        Log.Information($"[SettingsManager.LoadSettings] Deserialized settings: SaveDebugImages={loadedSettings.SaveDebugImages}, VerboseLogging={loadedSettings.VerboseLogging}");
+
                         _settings = loadedSettings;
-                        Log.Information($"Settings loaded from {_settingsFilePath}");
+                        Log.Information($"[SettingsManager.LoadSettings] Settings loaded from {_settingsFilePath}");
+                    }
+                    else
+                    {
+                        Log.Warning("[SettingsManager.LoadSettings] Loaded settings was null");
                     }
                 }
                 else
                 {
                     // First run - save default settings
+                    Log.Information($"[SettingsManager.LoadSettings] Settings file not found at {_settingsFilePath}, creating default");
                     SaveSettings();
-                    Log.Information("Default settings created");
+                    Log.Information("[SettingsManager.LoadSettings] Default settings created");
                 }
+
+                // Log the state of settings after loading
+                Log.Information($"[SettingsManager.LoadSettings] Current settings state: SaveDebugImages={_settings.SaveDebugImages}, VerboseLogging={_settings.VerboseLogging}");
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to load settings, using defaults");
+                Log.Error(ex, "[SettingsManager.LoadSettings] Failed to load settings, using defaults");
                 _settings = new AppSettings();
+                Log.Information($"[SettingsManager.LoadSettings] Created new default settings: SaveDebugImages={_settings.SaveDebugImages}, VerboseLogging={_settings.VerboseLogging}");
             }
         }
 
@@ -63,13 +78,58 @@ namespace BlackoutScanner.Services
         {
             try
             {
+                Log.Information($"[SettingsManager.SaveSettings] Starting to save settings...");
+                Log.Information($"[SettingsManager.SaveSettings] Current settings: SaveDebugImages={_settings.SaveDebugImages}, VerboseLogging={_settings.VerboseLogging}");
+
                 var json = JsonConvert.SerializeObject(_settings, Formatting.Indented);
+                Log.Debug($"[SettingsManager.SaveSettings] Settings JSON to save: {json}");
+
+                // Before saving, check if the file already exists and what it contains
+                if (File.Exists(_settingsFilePath))
+                {
+                    var existingJson = File.ReadAllText(_settingsFilePath);
+                    Log.Debug($"[SettingsManager.SaveSettings] Existing JSON before save: {existingJson}");
+                    try
+                    {
+                        var existingSettings = JsonConvert.DeserializeObject<AppSettings>(existingJson);
+                        if (existingSettings != null)
+                        {
+                            Log.Debug($"[SettingsManager.SaveSettings] Existing SaveDebugImages={existingSettings.SaveDebugImages}");
+                        }
+                    }
+                    catch (Exception parseEx)
+                    {
+                        Log.Warning(parseEx, "[SettingsManager.SaveSettings] Could not parse existing settings file");
+                    }
+                }
+
                 File.WriteAllText(_settingsFilePath, json);
-                Log.Information("Settings saved");
+                Log.Information($"[SettingsManager.SaveSettings] Settings saved to {_settingsFilePath}");
+
+                // Verify saved file
+                if (File.Exists(_settingsFilePath))
+                {
+                    var savedJson = File.ReadAllText(_settingsFilePath);
+                    Log.Debug($"[SettingsManager.SaveSettings] Verified saved JSON: {savedJson}");
+
+                    // Parse the saved JSON to verify the settings were properly saved
+                    try
+                    {
+                        var verifiedSettings = JsonConvert.DeserializeObject<AppSettings>(savedJson);
+                        if (verifiedSettings != null)
+                        {
+                            Log.Information($"[SettingsManager.SaveSettings] Verified SaveDebugImages={verifiedSettings.SaveDebugImages}, matches in-memory value: {verifiedSettings.SaveDebugImages == _settings.SaveDebugImages}");
+                        }
+                    }
+                    catch (Exception parseEx)
+                    {
+                        Log.Error(parseEx, "[SettingsManager.SaveSettings] Error parsing saved JSON");
+                    }
+                }
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to save settings");
+                Log.Error(ex, "[SettingsManager.SaveSettings] Failed to save settings");
             }
         }
 

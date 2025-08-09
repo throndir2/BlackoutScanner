@@ -27,12 +27,14 @@ namespace BlackoutScanner.Services
         private readonly IFileSystem _fileSystem;
         private readonly string[] _supportedLanguages;
         private readonly string _tessdataDirectory;
+        private readonly ISettingsManager _settingsManager;
 
         // Default constructor for DI
-        public OCRProcessor(IImageProcessor imageProcessor, IFileSystem fileSystem)
+        public OCRProcessor(IImageProcessor imageProcessor, IFileSystem fileSystem, ISettingsManager settingsManager)
         {
             _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            _settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
 
             // Default values
             _supportedLanguages = new[] { "eng", "kor", "jpn", "chi_sim", "chi_tra" };
@@ -42,10 +44,11 @@ namespace BlackoutScanner.Services
         }
 
         // For testing and specific configurations
-        public OCRProcessor(IImageProcessor imageProcessor, IFileSystem fileSystem, string[] supportedLanguages, string tessdataDirectory)
+        public OCRProcessor(IImageProcessor imageProcessor, IFileSystem fileSystem, ISettingsManager settingsManager, string[] supportedLanguages, string tessdataDirectory)
         {
             _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            _settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
             _supportedLanguages = supportedLanguages ?? throw new ArgumentNullException(nameof(supportedLanguages));
             _tessdataDirectory = tessdataDirectory ?? throw new ArgumentNullException(nameof(tessdataDirectory));
 
@@ -110,8 +113,28 @@ namespace BlackoutScanner.Services
         // Method to save debug image information
         public void SaveDebugImage(Bitmap bitmap, string category, string fieldName)
         {
-            string debugImagesFolder = "DebugImages";
-            bool verboseLogging = true;
+            // Get settings from SettingsManager instead of hardcoding
+            bool saveDebugImages = _settingsManager?.Settings.SaveDebugImages ?? false;
+            string debugImagesFolder = _settingsManager?.Settings.DebugImagesFolder ?? "DebugImages";
+            bool verboseLogging = _settingsManager?.Settings.VerboseLogging ?? false;
+
+            // Add detailed logging
+            Log.Information($"[OCRProcessor.SaveDebugImage] Called for category='{category}', field='{fieldName}'");
+            Log.Information($"[OCRProcessor.SaveDebugImage] SettingsManager is null? {_settingsManager == null}");
+            if (_settingsManager != null)
+            {
+                Log.Information($"[OCRProcessor.SaveDebugImage] _settingsManager.Settings.SaveDebugImages={_settingsManager.Settings.SaveDebugImages}");
+            }
+            Log.Information($"[OCRProcessor.SaveDebugImage] saveDebugImages={saveDebugImages} (after checking settings)");
+
+            // Don't save if the SaveDebugImages setting is off
+            if (!saveDebugImages)
+            {
+                Log.Information($"[OCRProcessor.SaveDebugImage] NOT saving debug image because saveDebugImages is false");
+                return;
+            }
+
+            Log.Information($"[OCRProcessor.SaveDebugImage] SAVING debug image because saveDebugImages is true");
 
             // Generate a hash for the bitmap
             BitmapImage bitmapImage = ConvertBitmapToBitmapImage(bitmap);
@@ -199,12 +222,18 @@ namespace BlackoutScanner.Services
 
         public OCRResult ProcessImage(Bitmap bitmap, string category = "", string fieldName = "")
         {
-            // Default values for processing
+            // Get values from settings instead of hardcoding
             int attempt = 0;
             bool numericalOnly = false;
-            bool saveDebugImages = false;
-            string debugImagesFolder = "DebugImages";
-            bool verboseLogging = false;
+            bool saveDebugImages = _settingsManager?.Settings.SaveDebugImages ?? false;
+            string debugImagesFolder = _settingsManager?.Settings.DebugImagesFolder ?? "DebugImages";
+            bool verboseLogging = _settingsManager?.Settings.VerboseLogging ?? false;
+
+            Log.Debug($"[OCRProcessor.ProcessImage] saveDebugImages={saveDebugImages} from SettingsManager");
+            if (_settingsManager != null)
+            {
+                Log.Debug($"[OCRProcessor.ProcessImage] _settingsManager.Settings.SaveDebugImages={_settingsManager.Settings.SaveDebugImages}");
+            }
 
             return ProcessImageWithFallback(bitmap, attempt, numericalOnly, saveDebugImages, debugImagesFolder, verboseLogging, category, fieldName);
         }
@@ -212,6 +241,8 @@ namespace BlackoutScanner.Services
         // Keep original method for backward compatibility
         public OCRResult ProcessImageWithFallback(Bitmap bitmap, int attempt, bool numericalOnly, bool saveDebugImages = false, string debugImagesFolder = "DebugImages", bool verboseLogging = false, string category = "", string fieldName = "")
         {
+            Log.Debug($"[OCRProcessor.ProcessImageWithFallback] Called with saveDebugImages={saveDebugImages}, category='{category}', field='{fieldName}'");
+
             // Define a default confidence threshold (previously it was a parameter)
             float confidenceThreshold = 80.0f;
 
@@ -231,9 +262,14 @@ namespace BlackoutScanner.Services
                 {
                     if (saveDebugImages)
                     {
+                        Log.Debug($"[OCRProcessor.ProcessImageWithFallback] Calling SaveDebugImage for cached result because saveDebugImages={saveDebugImages}");
                         // Save a debug image with cached result
                         SaveDebugImage(bitmap, imageHash, category, fieldName, cachedResult.Text,
                             CalculateAverageConfidence(cachedResult), saveDebugImages, debugImagesFolder, verboseLogging);
+                    }
+                    else
+                    {
+                        Log.Debug($"[OCRProcessor.ProcessImageWithFallback] NOT calling SaveDebugImage for cached result because saveDebugImages={saveDebugImages}");
                     }
                     return cachedResult;
                 }

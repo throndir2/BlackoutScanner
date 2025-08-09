@@ -11,6 +11,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Windows.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -164,8 +165,16 @@ namespace BlackoutScanner.Views
                 GameProfileManager = ServiceLocator.GetService<IGameProfileManager>();
                 SettingsManager = ServiceLocator.GetService<ISettingsManager>();
 
+                Log.Information($"[InitializeAppComponents] Got services, about to load settings");
+
                 // Load debug settings from SettingsManager instead
                 LoadDebugSettingsFromManager();
+
+                // Schedule a verification for when UI is fully loaded
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    VerifySettingsAndUISync();
+                }));
 
                 // Load profiles FIRST - this is fast
                 Dispatcher.Invoke(() =>
@@ -219,8 +228,20 @@ namespace BlackoutScanner.Views
                         var cacheData = LoadOcrResultsCache();
                         ocrProcessor.LoadCache(cacheData);
 
-                        // Update the Scanner with our debug settings
+                        // Update the Scanner with our debug settings - CRITICAL POINT
+                        Log.Information($"[InitializeAppComponents] About to update scanner settings: saveDebugImages={saveDebugImages}, verboseLogging={verboseLogging}");
+                        // Double-check current settings values from SettingsManager
+                        if (SettingsManager != null)
+                        {
+                            Log.Information($"[InitializeAppComponents] Current SettingsManager.Settings.SaveDebugImages={SettingsManager.Settings.SaveDebugImages}");
+                            // Re-sync our local values with SettingsManager to ensure consistency
+                            saveDebugImages = SettingsManager.Settings.SaveDebugImages;
+                            verboseLogging = SettingsManager.Settings.VerboseLogging;
+                            Log.Information($"[InitializeAppComponents] After re-sync: saveDebugImages={saveDebugImages}, verboseLogging={verboseLogging}");
+                        }
+
                         scanner.UpdateDebugSettings(saveDebugImages, verboseLogging, debugImagesFolder);
+                        Log.Information($"[InitializeAppComponents] Scanner debug settings updated");
                         SubscribeToScannerEvents();
 
                         Dispatcher.Invoke(() =>
@@ -1289,11 +1310,83 @@ namespace BlackoutScanner.Views
         {
             if (SettingsManager != null)
             {
+                Log.Information($"[LoadDebugSettingsFromManager] Before loading - current saveDebugImages={saveDebugImages}");
+                Log.Information($"[LoadDebugSettingsFromManager] SettingsManager.Settings.SaveDebugImages={SettingsManager.Settings.SaveDebugImages}");
+
+                // Store settings values in local fields
                 saveDebugImages = SettingsManager.Settings.SaveDebugImages;
                 verboseLogging = SettingsManager.Settings.VerboseLogging;
                 debugImagesFolder = SettingsManager.Settings.DebugImagesFolder;
 
-                Log.Debug($"Debug settings loaded from SettingsManager: saveImages={saveDebugImages}, verbose={verboseLogging}, folder={debugImagesFolder}");
+                Log.Information($"[LoadDebugSettingsFromManager] Debug settings loaded from SettingsManager: saveImages={saveDebugImages}, verbose={verboseLogging}, folder={debugImagesFolder}");
+
+                // Update UI to reflect loaded settings - do this on UI thread
+                Dispatcher.Invoke(() =>
+                {
+                    try
+                    {
+                        // Find the UI elements by name
+                        var saveImagesCheckbox = this.FindName("saveDebugImagesCheckbox") as CheckBox;
+                        var verboseCheckbox = this.FindName("verboseLoggingCheckbox") as CheckBox;
+                        var debugFolderTextBox = this.FindName("debugImagesFolderTextBox") as TextBox;
+
+                        // Update checkboxes if available
+                        if (saveImagesCheckbox != null)
+                        {
+                            // Temporarily remove event handlers to avoid triggering save while loading
+                            saveImagesCheckbox.Click -= DebugSettings_Changed;
+                            saveImagesCheckbox.IsChecked = saveDebugImages;
+                            saveImagesCheckbox.Click += DebugSettings_Changed;
+                            Log.Information($"[LoadDebugSettingsFromManager] Updated saveDebugImagesCheckbox.IsChecked={saveImagesCheckbox.IsChecked}");
+                        }
+                        else
+                        {
+                            Log.Warning("[LoadDebugSettingsFromManager] saveDebugImagesCheckbox not found, cannot update UI");
+                        }
+
+                        if (verboseCheckbox != null)
+                        {
+                            verboseCheckbox.Click -= DebugSettings_Changed;
+                            verboseCheckbox.IsChecked = verboseLogging;
+                            verboseCheckbox.Click += DebugSettings_Changed;
+                            Log.Information($"[LoadDebugSettingsFromManager] Updated verboseLoggingCheckbox.IsChecked={verboseCheckbox.IsChecked}");
+                        }
+                        else
+                        {
+                            Log.Warning("[LoadDebugSettingsFromManager] verboseLoggingCheckbox not found, cannot update UI");
+                        }
+
+                        // Update text box if available
+                        if (debugFolderTextBox != null)
+                        {
+                            debugFolderTextBox.Text = debugImagesFolder;
+                            Log.Information($"[LoadDebugSettingsFromManager] Updated debugImagesFolderTextBox.Text={debugFolderTextBox.Text}");
+                        }
+                        else
+                        {
+                            Log.Warning("[LoadDebugSettingsFromManager] debugImagesFolderTextBox not found, cannot update UI");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "[LoadDebugSettingsFromManager] Error updating UI elements");
+                    }
+                });
+
+                // If scanner is available, update its settings immediately
+                if (scanner != null)
+                {
+                    Log.Information($"[LoadDebugSettingsFromManager] Updating scanner debug settings: saveDebugImages={saveDebugImages}");
+                    scanner.UpdateDebugSettings(saveDebugImages, verboseLogging, debugImagesFolder);
+                }
+                else
+                {
+                    Log.Information($"[LoadDebugSettingsFromManager] Scanner not available yet, settings will be applied when it's initialized");
+                }
+            }
+            else
+            {
+                Log.Warning("[LoadDebugSettingsFromManager] SettingsManager is null, using default values");
             }
         }
 
@@ -1301,15 +1394,29 @@ namespace BlackoutScanner.Views
         {
             try
             {
+                Log.Information($"[SaveDebugSettings] Starting to save debug settings...");
+                Log.Information($"[SaveDebugSettings] Current values: saveDebugImages={saveDebugImages}, verboseLogging={verboseLogging}, debugImagesFolder={debugImagesFolder}");
+
                 if (SettingsManager != null)
                 {
+                    // Log before updating
+                    Log.Information($"[SaveDebugSettings] Before update - SettingsManager.Settings.SaveDebugImages={SettingsManager.Settings.SaveDebugImages}");
+
                     // Update settings in the manager
                     SettingsManager.Settings.SaveDebugImages = saveDebugImages;
                     SettingsManager.Settings.VerboseLogging = verboseLogging;
                     SettingsManager.Settings.DebugImagesFolder = debugImagesFolder;
 
+                    // Log after updating
+                    Log.Information($"[SaveDebugSettings] After update - SettingsManager.Settings.SaveDebugImages={SettingsManager.Settings.SaveDebugImages}");
+
                     // Save to disk
                     SettingsManager.SaveSettings();
+                    Log.Information("[SaveDebugSettings] Settings saved to file");
+                }
+                else
+                {
+                    Log.Warning("[SaveDebugSettings] SettingsManager is null, cannot save settings");
                 }
 
                 // Ensure the debug images folder exists
@@ -1321,14 +1428,71 @@ namespace BlackoutScanner.Views
                 // Update the Scanner's debug settings
                 if (scanner != null)
                 {
+                    Log.Information($"[SaveDebugSettings] Updating scanner debug settings: saveDebugImages={saveDebugImages}");
                     scanner.UpdateDebugSettings(saveDebugImages, verboseLogging, debugImagesFolder);
                 }
+                else
+                {
+                    Log.Warning("[SaveDebugSettings] Scanner is null, cannot update scanner settings");
+                }
 
-                Log.Information($"Debug settings updated: saveImages={saveDebugImages}, verbose={verboseLogging}, folder={debugImagesFolder}");
+                Log.Information($"[SaveDebugSettings] Debug settings updated: saveImages={saveDebugImages}, verbose={verboseLogging}, folder={debugImagesFolder}");
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to save debug settings");
+            }
+        }
+
+        private void VerifySettingsAndUISync()
+        {
+            try
+            {
+                Log.Information("[MainWindow.VerifySettingsAndUISync] Verifying settings and UI sync");
+
+                if (SettingsManager?.Settings == null)
+                {
+                    Log.Warning("[MainWindow.VerifySettingsAndUISync] SettingsManager or Settings is null");
+                    return;
+                }
+
+                // Find the UI elements by name
+                var saveImagesCheckbox = this.FindName("saveDebugImagesCheckbox") as CheckBox;
+
+                // Check if the UI matches the settings
+                if (saveImagesCheckbox != null)
+                {
+                    if (saveImagesCheckbox.IsChecked != SettingsManager.Settings.SaveDebugImages)
+                    {
+                        Log.Warning($"[MainWindow.VerifySettingsAndUISync] UI checkbox state {saveImagesCheckbox.IsChecked} " +
+                                    $"doesn't match setting {SettingsManager.Settings.SaveDebugImages}");
+
+                        // Force reload of settings to UI
+                        LoadDebugSettingsFromManager();
+
+                        // Also make sure scanner has the correct settings
+                        if (scanner != null)
+                        {
+                            scanner.UpdateDebugSettings(
+                                SettingsManager.Settings.SaveDebugImages,
+                                SettingsManager.Settings.VerboseLogging,
+                                SettingsManager.Settings.DebugImagesFolder);
+                        }
+                    }
+                    else
+                    {
+                        Log.Information($"[MainWindow.VerifySettingsAndUISync] UI checkbox state {saveImagesCheckbox.IsChecked} " +
+                                       $"matches setting {SettingsManager.Settings.SaveDebugImages}");
+                    }
+                }
+                else
+                {
+                    Log.Warning("[MainWindow.VerifySettingsAndUISync] saveDebugImagesCheckbox not found");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[MainWindow.VerifySettingsAndUISync] Error verifying settings and UI sync");
             }
         }
 
@@ -1394,22 +1558,85 @@ namespace BlackoutScanner.Views
             }
         }
 
+        private void ResetDebugSettings()
+        {
+            Log.Information("[MainWindow.ResetDebugSettings] Resetting debug settings to defaults");
+
+            if (SettingsManager?.Settings != null)
+            {
+                // Set to default values
+                SettingsManager.Settings.SaveDebugImages = false;
+                SettingsManager.Settings.VerboseLogging = false;
+                SettingsManager.Settings.DebugImagesFolder = "DebugImages";
+
+                // Save the reset settings
+                SettingsManager.SaveSettings();
+
+                // Update local fields
+                saveDebugImages = false;
+                verboseLogging = false;
+                debugImagesFolder = "DebugImages";
+
+                // Update UI
+                LoadDebugSettingsFromManager();
+
+                // Update scanner
+                if (scanner != null)
+                {
+                    scanner.UpdateDebugSettings(false, false, "DebugImages");
+                }
+
+                Log.Information("[MainWindow.ResetDebugSettings] Debug settings reset complete");
+            }
+        }
+
         private void DebugSettings_Changed(object sender, RoutedEventArgs e)
         {
             // Since we can't access the UI controls directly yet, we'll manually toggle the values
             // This method will be called from the UI button click
             if (sender is CheckBox checkBox)
             {
-                if (checkBox.Content?.ToString() == "Save Debug Images")
+                string settingName = checkBox.Content?.ToString() ?? "Unknown";
+                bool newValue = checkBox.IsChecked ?? false;
+
+                Log.Information($"[DebugSettings_Changed] CheckBox '{settingName}' changed to: {newValue}");
+                bool settingsChanged = false;
+
+                if (settingName == "Save Debug Images")
                 {
-                    saveDebugImages = checkBox.IsChecked ?? false;
+                    Log.Information($"[DebugSettings_Changed] Changing saveDebugImages from {saveDebugImages} to {newValue}");
+                    if (saveDebugImages != newValue)
+                    {
+                        saveDebugImages = newValue;
+                        settingsChanged = true;
+                    }
                 }
-                else if (checkBox.Content?.ToString() == "Verbose Logging")
+                else if (settingName == "Verbose Logging")
                 {
-                    verboseLogging = checkBox.IsChecked ?? false;
+                    Log.Information($"[DebugSettings_Changed] Changing verboseLogging from {verboseLogging} to {newValue}");
+                    if (verboseLogging != newValue)
+                    {
+                        verboseLogging = newValue;
+                        settingsChanged = true;
+                    }
                 }
 
-                SaveDebugSettings();
+                if (settingsChanged)
+                {
+                    // Save settings to disk
+                    SaveDebugSettings();
+
+                    // Also directly update the scanner if available - don't wait for next scan
+                    if (scanner != null)
+                    {
+                        Log.Information($"[DebugSettings_Changed] Directly updating scanner with new settings: saveDebugImages={saveDebugImages}");
+                        scanner.UpdateDebugSettings(saveDebugImages, verboseLogging, debugImagesFolder);
+                    }
+                    else
+                    {
+                        Log.Warning("[DebugSettings_Changed] Scanner not available, can't update settings directly");
+                    }
+                }
             }
         }
 

@@ -40,15 +40,24 @@ namespace BlackoutScanner.Services
             this.saveDebugImages = false;
             this.verboseLogging = false;
             this.debugImagesFolder = "DebugImages";
+
+            // Log initial values
+            Log.Information("[Scanner.Constructor] Scanner initialized with default settings: " +
+                           $"saveDebugImages={this.saveDebugImages}, " +
+                           $"verboseLogging={this.verboseLogging}, " +
+                           $"debugImagesFolder={this.debugImagesFolder}");
         }
 
         public void UpdateDebugSettings(bool saveDebugImages, bool verboseLogging, string debugImagesFolder)
         {
+            Log.Information($"[Scanner.UpdateDebugSettings] Called with saveDebugImages={saveDebugImages}, verboseLogging={verboseLogging}, folder={debugImagesFolder}");
+            Log.Information($"[Scanner.UpdateDebugSettings] Previous values: saveDebugImages={this.saveDebugImages}, verboseLogging={this.verboseLogging}");
+
             this.saveDebugImages = saveDebugImages;
             this.verboseLogging = verboseLogging;
             this.debugImagesFolder = debugImagesFolder;
 
-            Log.Information($"Scanner debug settings updated: saveDebugImages={saveDebugImages}, verboseLogging={verboseLogging}, folder={debugImagesFolder}");
+            Log.Information($"[Scanner.UpdateDebugSettings] New values set: saveDebugImages={this.saveDebugImages}, verboseLogging={this.verboseLogging}");
         }
 
         public void StartScanning(GameProfile profile)
@@ -97,8 +106,33 @@ namespace BlackoutScanner.Services
                     // Convert relative bounds to absolute for this window size
                     var categoryAbsoluteBounds = category.RelativeBounds.ToAbsolute(containerRect);
 
-                    OCRResult categoryResult = ProcessArea(gameWindowBitmap, categoryAbsoluteBounds, false, "CategoryHeader", category.Name);
-                    if (categoryResult.Text.Trim().Equals(category.Name, StringComparison.OrdinalIgnoreCase))
+                    // Check if this category matches based on its comparison mode
+                    bool isCategoryMatch = false;
+
+                    if (category.ComparisonMode == CategoryComparisonMode.Text)
+                    {
+                        // Text comparison mode - use OCR
+                        OCRResult categoryResult = ProcessArea(gameWindowBitmap, categoryAbsoluteBounds, false, "CategoryHeader", category.Name);
+                        isCategoryMatch = !string.IsNullOrWhiteSpace(category.TextToCompare) &&
+                                          categoryResult.Text.Trim().Contains(category.TextToCompare, StringComparison.OrdinalIgnoreCase);
+                    }
+                    else // Image comparison mode
+                    {
+                        // Image comparison mode
+                        if (category.PreviewImageData != null && category.PreviewImageData.Length > 0)
+                        {
+                            using (var categoryAreaBitmap = gameWindowBitmap.Clone(categoryAbsoluteBounds, gameWindowBitmap.PixelFormat))
+                            {
+                                using (var ms = new System.IO.MemoryStream(category.PreviewImageData))
+                                using (var referenceImage = new Bitmap(ms))
+                                {
+                                    isCategoryMatch = CompareImages(categoryAreaBitmap, referenceImage);
+                                }
+                            }
+                        }
+                    }
+
+                    if (isCategoryMatch)
                     {
                         // Notify that we're scanning this category
                         CategoryScanning?.Invoke(category.Name);
@@ -139,11 +173,16 @@ namespace BlackoutScanner.Services
         {
             try
             {
+                Log.Debug($"[Scanner.ProcessArea] Processing area for category='{category}', field='{fieldName}'");
+                Log.Debug($"[Scanner.ProcessArea] Current scanner settings: saveDebugImages={saveDebugImages}, verboseLogging={verboseLogging}");
+
                 lock (bitmapLock)
                 {
                     using (var croppedBitmap = gameWindowBitmap.Clone(area, gameWindowBitmap.PixelFormat))
                     {
                         // Use the extended method with debug parameters
+                        Log.Debug($"[Scanner.ProcessArea] Calling ProcessImageWithFallback with saveDebugImages={saveDebugImages}");
+
                         return ocrProcessor.ProcessImageWithFallback(
                             croppedBitmap,
                             0,
@@ -161,6 +200,55 @@ namespace BlackoutScanner.Services
                 Log.Error(ex, "Failed to process image area.");
                 return new OCRResult { Text = string.Empty };
             }
+        }
+
+        private bool CompareImages(Bitmap image1, Bitmap image2, double threshold = 0.95)
+        {
+            try
+            {
+                // Resize images if they don't match dimensions
+                if (image1.Width != image2.Width || image1.Height != image2.Height)
+                {
+                    using (var resized = new Bitmap(image2, image1.Width, image1.Height))
+                    {
+                        return CompareImagePixels(image1, resized, threshold);
+                    }
+                }
+
+                return CompareImagePixels(image1, image2, threshold);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error comparing images");
+                return false;
+            }
+        }
+
+        private bool CompareImagePixels(Bitmap image1, Bitmap image2, double threshold)
+        {
+            int matchingPixels = 0;
+            int totalPixels = image1.Width * image1.Height;
+
+            for (int x = 0; x < image1.Width; x++)
+            {
+                for (int y = 0; y < image1.Height; y++)
+                {
+                    var pixel1 = image1.GetPixel(x, y);
+                    var pixel2 = image2.GetPixel(x, y);
+
+                    // Simple RGB comparison with tolerance
+                    if (Math.Abs(pixel1.R - pixel2.R) < 10 &&
+                        Math.Abs(pixel1.G - pixel2.G) < 10 &&
+                        Math.Abs(pixel1.B - pixel2.B) < 10)
+                    {
+                        matchingPixels++;
+                    }
+                }
+            }
+
+            double similarity = (double)matchingPixels / totalPixels;
+            Log.Debug($"Image comparison similarity: {similarity:P2}");
+            return similarity >= threshold;
         }
     }
 }

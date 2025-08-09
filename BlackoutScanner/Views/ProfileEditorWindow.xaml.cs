@@ -1,5 +1,7 @@
+using BlackoutScanner.Interfaces;
 using BlackoutScanner.Models;
 using BlackoutScanner.Services;
+using BlackoutScanner.Utilities;
 using Newtonsoft.Json;
 using Serilog;
 using System;
@@ -18,6 +20,8 @@ namespace BlackoutScanner.Views
 {
     public partial class ProfileEditorWindow : Window, INotifyPropertyChanged
     {
+        public static Array ComparisonModes => Enum.GetValues(typeof(CategoryComparisonMode));
+
         public GameProfile Profile { get; private set; }
         public bool IsActiveProfile { get; set; } // Add this property
         private readonly ObservableCollection<CaptureCategory> categories;
@@ -67,6 +71,9 @@ namespace BlackoutScanner.Views
                     }
                 }
 
+                // Migrate existing profiles to use the new comparison mode fields
+                MigrateProfileCategories(Profile);
+
                 Log.Information("Editing profile for {GameTitle}", Profile.ProfileName);
 
                 // Convert RelativeBounds to Bounds for UI display
@@ -86,6 +93,25 @@ namespace BlackoutScanner.Views
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
+        private void MigrateProfileCategories(GameProfile profile)
+        {
+            foreach (var category in profile.Categories)
+            {
+                // Set default comparison mode if not set
+                if (category.ComparisonMode == default(CategoryComparisonMode))
+                {
+                    category.ComparisonMode = CategoryComparisonMode.Text;
+                }
+
+                // If TextToCompare is empty but Name exists, use Name as default
+                if (string.IsNullOrWhiteSpace(category.TextToCompare) && !string.IsNullOrWhiteSpace(category.Name))
+                {
+                    category.TextToCompare = category.Name;
+                    Log.Information($"Migrated category '{category.Name}': Set TextToCompare to '{category.TextToCompare}'");
+                }
+            }
+        }
+
         private void ConvertRelativeBoundsToAbsolute()
         {
             var gameWindowRect = screenCapture.GetWindowRectangle(Profile.GameWindowTitle);
@@ -102,6 +128,13 @@ namespace BlackoutScanner.Views
             {
                 category.Bounds = category.RelativeBounds.ToAbsolute(containerRect);
                 Log.Debug("Converted category '{CategoryName}' relative bounds {RelativeBounds} to absolute {AbsoluteBounds}", category.Name, category.RelativeBounds, category.Bounds);
+
+                // Restore preview image from byte array if available
+                if (category.PreviewImageData != null && category.PreviewImageData.Length > 0)
+                {
+                    category.PreviewImage = ConvertByteArrayToBitmapImage(category.PreviewImageData);
+                }
+
                 foreach (var field in category.Fields)
                 {
                     field.Bounds = field.RelativeBounds.ToAbsolute(containerRect);
@@ -180,7 +213,26 @@ namespace BlackoutScanner.Views
                         {
                             using (var categoryScreenshot = gameWindowScreenshot.Clone(selectionInWindowCoordinates, gameWindowScreenshot.PixelFormat))
                             {
+                                // Convert to BitmapImage for UI display
                                 selectedCategory.PreviewImage = ConvertBitmapToBitmapImage(categoryScreenshot);
+
+                                // Also save as byte array for persistence
+                                selectedCategory.PreviewImageData = ConvertBitmapToByteArray(categoryScreenshot);
+
+                                // If Text mode, perform OCR to get default text
+                                if (selectedCategory.ComparisonMode == CategoryComparisonMode.Text)
+                                {
+                                    var imageProcessor = new BlackoutScanner.Infrastructure.ImageProcessor();
+                                    var fileSystem = new BlackoutScanner.Infrastructure.FileSystem();
+                                    var settingsManager = ServiceLocator.GetService<ISettingsManager>();
+                                    var ocrProcessor = new OCRProcessor(imageProcessor, fileSystem, settingsManager);
+                                    var ocrResult = ocrProcessor.ProcessImage(categoryScreenshot);
+                                    if (!string.IsNullOrWhiteSpace(ocrResult.Text))
+                                    {
+                                        selectedCategory.TextToCompare = ocrResult.Text.Trim();
+                                        Log.Information($"OCR extracted text: {selectedCategory.TextToCompare}");
+                                    }
+                                }
                             }
                         }
                     }
@@ -321,8 +373,11 @@ namespace BlackoutScanner.Views
                 var updatedCategory = new CaptureCategory
                 {
                     Name = category.Name,
+                    ComparisonMode = category.ComparisonMode,
+                    TextToCompare = category.TextToCompare,
                     RelativeBounds = category.RelativeBounds,
-                    Bounds = category.Bounds
+                    Bounds = category.Bounds,
+                    PreviewImageData = category.PreviewImageData
                 };
 
                 // Set the preview image separately since it's not part of the constructor
@@ -394,6 +449,29 @@ namespace BlackoutScanner.Views
             {
                 bitmap.Save(memory, System.Drawing.Imaging.ImageFormat.Png);
                 memory.Position = 0;
+                var bitmapImage = new BitmapImage();
+                bitmapImage.BeginInit();
+                bitmapImage.StreamSource = memory;
+                bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+                bitmapImage.EndInit();
+                bitmapImage.Freeze();
+                return bitmapImage;
+            }
+        }
+
+        private byte[] ConvertBitmapToByteArray(Bitmap bitmap)
+        {
+            using (var memory = new MemoryStream())
+            {
+                bitmap.Save(memory, System.Drawing.Imaging.ImageFormat.Png);
+                return memory.ToArray();
+            }
+        }
+
+        private BitmapImage ConvertByteArrayToBitmapImage(byte[] imageData)
+        {
+            using (var memory = new MemoryStream(imageData))
+            {
                 var bitmapImage = new BitmapImage();
                 bitmapImage.BeginInit();
                 bitmapImage.StreamSource = memory;

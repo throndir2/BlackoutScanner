@@ -414,59 +414,170 @@
                         Value="{StaticResource BackgroundBrush}"/>
         </Style>
 
-        <!-- Add ComboBox style for better visibility -->
+        <!-- ComboBox Style with template for dark theme compatibility -->
         <Style TargetType="ComboBox">
                 <Setter Property="Background"
-                        Value="{StaticResource ControlBackgroundBrush}"/>
+                                Value="{StaticResource ControlBackgroundBrush}"/>
                 <Setter Property="Foreground"
-                        Value="{StaticResource ForegroundBrush}"/>
+                                Value="{StaticResource ForegroundBrush}"/>
                 <Setter Property="BorderBrush"
-                        Value="{StaticResource BorderBrush}"/>
+                                Value="{StaticResource BorderBrush}"/>
                 <Setter Property="BorderThickness"
-                        Value="1"/>
+                                Value="1"/>
+                <Setter Property="Template">
+                        <Setter.Value>
+                                <ControlTemplate TargetType="ComboBox">
+                                        <Grid>
+                                                <ToggleButton x:Name="ToggleButton"
+                                                              Grid.Column="2"
+                                                              Focusable="false"
+                                                              ClickMode="Press"
+                                                              IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                                        <ToggleButton.Template>
+                                                                <ControlTemplate TargetType="ToggleButton">
+                                                                        <Border x:Name="Border"
+                                                                                Background="{StaticResource ControlBackgroundBrush}"
+                                                                                BorderBrush="{StaticResource BorderBrush}"
+                                                                                BorderThickness="1">
+                                                                                <Grid>
+                                                                                        <Grid.ColumnDefinitions>
+                                                                                                <ColumnDefinition/>
+                                                                                                <ColumnDefinition Width="20"/>
+                                                                                        </Grid.ColumnDefinitions>
+                                                                                        <Border Grid.Column="1"
+                                                                                                Background="{StaticResource ControlBackgroundBrush}">
+                                                                                                <Path x:Name="Arrow"
+                                                                                                      Fill="{StaticResource ForegroundBrush}"
+                                                                                                      HorizontalAlignment="Center"
+                                                                                                      VerticalAlignment="Center"
+                                                                                                      Data="M 0 0 L 4 4 L 8 0 Z"/>
+                                                                                        </Border>
+                                                                                </Grid>
+                                                                        </Border>
+                                                                </ControlTemplate>
+                                                        </ToggleButton.Template>
+                                                </ToggleButton>
+                                                <ContentPresenter x:Name="ContentSite"
+                                                                  IsHitTestVisible="False"
+                                                                  Content="{TemplateBinding SelectionBoxItem}"
+                                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                                  ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                                  Margin="5,3,23,3"
+                                                                  VerticalAlignment="Center"
+                                                                  HorizontalAlignment="Left"/>
+                                                <TextBox x:Name="PART_EditableTextBox"
+                                                         Style="{x:Null}"
+                                                         HorizontalAlignment="Left"
+                                                         VerticalAlignment="Center"
+                                                         Margin="3,3,23,3"
+                                                         Focusable="True"
+                                                         Background="Transparent"
+                                                         Foreground="{StaticResource ForegroundBrush}"
+                                                         Visibility="Hidden"
+                                                         IsReadOnly="{TemplateBinding IsReadOnly}"/>
+                                                <Popup x:Name="Popup"
+                                                       Placement="Bottom"
+                                                       IsOpen="{TemplateBinding IsDropDownOpen}"
+                                                       AllowsTransparency="True"
+                                                       Focusable="False"
+                                                       PopupAnimation="Slide">
+                                                        <Grid x:Name="DropDown"
+                                                              SnapsToDevicePixels="True"
+                                                              MinWidth="{TemplateBinding ActualWidth}"
+                                                              MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                                                <Border x:Name="DropDownBorder"
+                                                                        Background="{StaticResource ControlBackgroundBrush}"
+                                                                        BorderThickness="1"
+                                                                        BorderBrush="{StaticResource BorderBrush}"/>
+                                                                <ScrollViewer Margin="4,6,4,6"
+                                                                              SnapsToDevicePixels="True">
+                                                                        <StackPanel IsItemsHost="True"
+                                                                                    KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                                                </ScrollViewer>
+                                                        </Grid>
+                                                </Popup>
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                                <Trigger Property="IsEditable"
+                                                                Value="true">
+                                                        <Setter Property="IsTabStop"
+                                                                        Value="false"/>
+                                                        <Setter TargetName="PART_EditableTextBox"
+                                                                        Property="Visibility"
+                                                                        Value="Visible"/>
+                                                        <Setter TargetName="ContentSite"
+                                                                        Property="Visibility"
+                                                                        Value="Hidden"/>
+                                                </Trigger>
+                                        </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                        </Setter.Value>
+                </Setter>
         </Style>
 
         <Style TargetType="ComboBoxItem">
                 <Setter Property="Background"
-                        Value="{StaticResource ControlBackgroundBrush}"/>
+                                Value="{StaticResource ControlBackgroundBrush}"/>
                 <Setter Property="Foreground"
-                        Value="{StaticResource ForegroundBrush}"/>
-                <Style.Triggers>
-                        <Trigger Property="IsMouseOver"
-                                 Value="True">
-                                <Setter Property="Background"
-                                        Value="{StaticResource ButtonHoverBackgroundBrush}"/>
-                        </Trigger>
-                        <Trigger Property="IsSelected"
-                                 Value="True">
-                                <Setter Property="Background"
-                                        Value="{StaticResource AccentBrush}"/>
-                                <Setter Property="Foreground"
-                                        Value="{StaticResource AccentForegroundBrush}"/>
-                        </Trigger>
-                </Style.Triggers>
+                                Value="{StaticResource ForegroundBrush}"/>
+                <Setter Property="Padding"
+                                Value="5,2"/>
+                <Setter Property="Template">
+                        <Setter.Value>
+                                <ControlTemplate TargetType="ComboBoxItem">
+                                        <Border x:Name="Border"
+                                                Background="{TemplateBinding Background}"
+                                                Padding="{TemplateBinding Padding}"
+                                                SnapsToDevicePixels="true">
+                                                <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                                <Trigger Property="IsHighlighted"
+                                                                Value="True">
+                                                        <Setter TargetName="Border"
+                                                                        Property="Background"
+                                                                        Value="{StaticResource ButtonHoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsSelected"
+                                                                Value="True">
+                                                        <Setter TargetName="Border"
+                                                                        Property="Background"
+                                                                        Value="{StaticResource AccentBrush}"/>
+                                                        <Setter Property="Foreground"
+                                                                        Value="{StaticResource AccentForegroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled"
+                                                                Value="False">
+                                                        <Setter Property="Foreground"
+                                                                        Value="{StaticResource SecondaryForegroundBrush}"/>
+                                                </Trigger>
+                                        </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                        </Setter.Value>
+                </Setter>
         </Style>
 
         <!-- Add DataGrid TextBox style for editing -->
         <Style TargetType="{x:Type TextBox}"
-                        x:Key="DataGridEditingTextBoxStyle">
+               x:Key="DataGridEditingTextBoxStyle">
                 <Setter Property="Background"
-                                Value="{StaticResource EditingBackgroundBrush}"/>
+                        Value="{StaticResource EditingBackgroundBrush}"/>
                 <Setter Property="Foreground"
-                                Value="{StaticResource EditingForegroundBrush}"/>
+                        Value="{StaticResource EditingForegroundBrush}"/>
                 <Setter Property="BorderThickness"
-                                Value="0"/>
+                        Value="0"/>
                 <Setter Property="Padding"
-                                Value="2"/>
+                        Value="2"/>
         </Style>
 
         <!-- Add DataGrid CheckBox style -->
         <Style TargetType="CheckBox"
-                        x:Key="DataGridCheckBoxStyle">
+               x:Key="DataGridCheckBoxStyle">
                 <Setter Property="HorizontalAlignment"
-                                Value="Center"/>
+                        Value="Center"/>
                 <Setter Property="VerticalAlignment"
-                                Value="Center"/>
+                        Value="Center"/>
                 <Setter Property="Template">
                         <Setter.Value>
                                 <ControlTemplate TargetType="CheckBox">
