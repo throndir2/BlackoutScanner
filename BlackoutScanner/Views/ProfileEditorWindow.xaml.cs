@@ -100,7 +100,7 @@ namespace BlackoutScanner.Views
                 // Set default comparison mode if not set
                 if (category.ComparisonMode == default(CategoryComparisonMode))
                 {
-                    category.ComparisonMode = CategoryComparisonMode.Text;
+                    category.ComparisonMode = CategoryComparisonMode.Image;
                 }
 
                 // If TextToCompare is empty but Name exists, use Name as default
@@ -148,6 +148,7 @@ namespace BlackoutScanner.Views
             var newCategory = new CaptureCategory
             {
                 Name = "New Category",
+                ComparisonMode = CategoryComparisonMode.Image,
                 Fields = new ObservableCollection<CaptureField>()
             };
             categories.Add(newCategory);

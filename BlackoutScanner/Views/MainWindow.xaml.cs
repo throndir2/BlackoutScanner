@@ -1514,7 +1514,8 @@ namespace BlackoutScanner.Views
                 if (!string.IsNullOrEmpty(selectedPath) && SettingsManager != null)
                 {
                     SettingsManager.Settings.ExportFolder = selectedPath;
-                    Log.Information($"Export folder set to: {selectedPath}");
+                    SettingsManager.SaveSettings(); // Auto-save immediately
+                    Log.Information($"Export folder set to: {selectedPath} and settings auto-saved");
                 }
             }
         }
@@ -1636,6 +1637,13 @@ namespace BlackoutScanner.Views
                     {
                         Log.Warning("[DebugSettings_Changed] Scanner not available, can't update settings directly");
                     }
+
+                    // Save all settings immediately
+                    if (SettingsManager != null)
+                    {
+                        SettingsManager.SaveSettings();
+                        Log.Information("[DebugSettings_Changed] Settings auto-saved");
+                    }
                 }
             }
         }
@@ -1661,8 +1669,21 @@ namespace BlackoutScanner.Views
                 if (!string.IsNullOrEmpty(selectedPath))
                 {
                     debugImagesFolder = selectedPath;  // Update the field directly
+
+                    // Update the TextBox
+                    if (FindName("debugImagesFolderTextBox") is TextBox debugFolderTextBox)
+                    {
+                        debugFolderTextBox.Text = selectedPath;
+                    }
+
                     SaveDebugSettings();
-                    Log.Information($"Debug images folder set to: {selectedPath}");
+
+                    // Auto-save all settings
+                    if (SettingsManager != null)
+                    {
+                        SettingsManager.SaveSettings();
+                        Log.Information($"Debug images folder set to: {selectedPath} and settings auto-saved");
+                    }
                 }
             }
         }

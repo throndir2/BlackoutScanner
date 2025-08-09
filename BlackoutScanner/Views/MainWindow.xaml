@@ -110,192 +110,195 @@
 
                         <!-- Tab for Configuration -->
                         <TabItem Header="Configuration">
-                                <Grid Margin="10">
-                                        <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="*"/>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                        <Grid Margin="10"
+                                              MinHeight="400">
+                                                <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="*"
+                                                                       MinHeight="200"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
 
-                                        <!-- Game Profiles Section -->
-                                        <TextBlock Grid.Row="0"
-                                                   Text="Game Profiles"
-                                                   FontWeight="Bold"
-                                                   Margin="0,0,0,5"/>
+                                                <!-- Game Profiles Section -->
+                                                <TextBlock Grid.Row="0"
+                                                           Text="Game Profiles"
+                                                           FontWeight="Bold"
+                                                           Margin="0,0,0,5"/>
 
-                                        <ListBox x:Name="profilesListBox"
-                                                 Grid.Row="1"
-                                                 Margin="0,0,0,10">
-                                                <ListBox.ItemTemplate>
-                                                        <DataTemplate>
-                                                                <Border x:Name="itemBorder"
-                                                                        BorderThickness="2"
-                                                                        BorderBrush="Transparent"
-                                                                        CornerRadius="3"
-                                                                        Padding="5"
-                                                                        Margin="2">
-                                                                        <StackPanel Orientation="Horizontal">
-                                                                                <TextBlock x:Name="activeIndicator"
-                                                                                           Text="▶ "
-                                                                                           FontWeight="Bold"
-                                                                                           Foreground="{StaticResource AccentBrush}"
-                                                                                           Visibility="Collapsed"
-                                                                                           VerticalAlignment="Center"/>
-                                                                                <TextBlock x:Name="profileNameText"
-                                                                                           Text="{Binding ProfileName}"
-                                                                                           VerticalAlignment="Center"/>
-                                                                                <TextBlock x:Name="windowTitleText"
-                                                                                           Text="{Binding GameWindowTitle, StringFormat=' ({0})'}"
-                                                                                           Foreground="{StaticResource SecondaryForegroundBrush}"
-                                                                                           FontStyle="Italic"
-                                                                                           VerticalAlignment="Center"/>
-                                                                        </StackPanel>
-                                                                </Border>
-                                                                <DataTemplate.Triggers>
-                                                                        <DataTrigger Value="True">
-                                                                                <DataTrigger.Binding>
-                                                                                        <MultiBinding Converter="{StaticResource ProfileComparisonConverter}">
-                                                                                                <Binding/>
-                                                                                                <Binding Path="GameProfileManager.ActiveProfile"
-                                                                                                         RelativeSource="{RelativeSource AncestorType=Window}"/>
-                                                                                        </MultiBinding>
-                                                                                </DataTrigger.Binding>
-                                                                                <Setter TargetName="itemBorder"
-                                                                                        Property="Background"
-                                                                                        Value="{StaticResource SelectedBackgroundBrush}"/>
-                                                                                <Setter TargetName="itemBorder"
-                                                                                        Property="BorderBrush"
-                                                                                        Value="{StaticResource AccentBrush}"/>
-                                                                                <Setter TargetName="activeIndicator"
-                                                                                        Property="Visibility"
-                                                                                        Value="Visible"/>
-                                                                                <Setter TargetName="profileNameText"
-                                                                                        Property="FontWeight"
-                                                                                        Value="Bold"/>
-                                                                        </DataTrigger>
-                                                                </DataTemplate.Triggers>
-                                                        </DataTemplate>
-                                                </ListBox.ItemTemplate>
-                                        </ListBox>
+                                                <ListBox x:Name="profilesListBox"
+                                                         Grid.Row="1"
+                                                         Margin="0,0,0,10"
+                                                         MinHeight="150"
+                                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                                        <ListBox.ItemTemplate>
+                                                                <DataTemplate>
+                                                                        <Border x:Name="itemBorder"
+                                                                                BorderThickness="2"
+                                                                                BorderBrush="Transparent"
+                                                                                CornerRadius="3"
+                                                                                Padding="5"
+                                                                                Margin="2">
+                                                                                <StackPanel Orientation="Horizontal">
+                                                                                        <TextBlock x:Name="activeIndicator"
+                                                                                                   Text="▶ "
+                                                                                                   FontWeight="Bold"
+                                                                                                   Foreground="{StaticResource AccentBrush}"
+                                                                                                   Visibility="Collapsed"
+                                                                                                   VerticalAlignment="Center"/>
+                                                                                        <TextBlock x:Name="profileNameText"
+                                                                                                   Text="{Binding ProfileName}"
+                                                                                                   VerticalAlignment="Center"/>
+                                                                                        <TextBlock x:Name="windowTitleText"
+                                                                                                   Text="{Binding GameWindowTitle, StringFormat=' ({0})'}"
+                                                                                                   Foreground="{StaticResource SecondaryForegroundBrush}"
+                                                                                                   FontStyle="Italic"
+                                                                                                   VerticalAlignment="Center"/>
+                                                                                </StackPanel>
+                                                                        </Border>
+                                                                        <DataTemplate.Triggers>
+                                                                                <DataTrigger Value="True">
+                                                                                        <DataTrigger.Binding>
+                                                                                                <MultiBinding Converter="{StaticResource ProfileComparisonConverter}">
+                                                                                                        <Binding/>
+                                                                                                        <Binding Path="GameProfileManager.ActiveProfile"
+                                                                                                                 RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                                                </MultiBinding>
+                                                                                        </DataTrigger.Binding>
+                                                                                        <Setter TargetName="itemBorder"
+                                                                                                Property="Background"
+                                                                                                Value="{StaticResource SelectedBackgroundBrush}"/>
+                                                                                        <Setter TargetName="itemBorder"
+                                                                                                Property="BorderBrush"
+                                                                                                Value="{StaticResource AccentBrush}"/>
+                                                                                        <Setter TargetName="activeIndicator"
+                                                                                                Property="Visibility"
+                                                                                                Value="Visible"/>
+                                                                                        <Setter TargetName="profileNameText"
+                                                                                                Property="FontWeight"
+                                                                                                Value="Bold"/>
+                                                                                </DataTrigger>
+                                                                        </DataTemplate.Triggers>
+                                                                </DataTemplate>
+                                                        </ListBox.ItemTemplate>
+                                                </ListBox>
 
-                                        <StackPanel Grid.Row="2"
-                                                    Orientation="Horizontal"
-                                                    HorizontalAlignment="Right"
-                                                    Margin="0,0,0,20">
-                                                <Button Content="New"
-                                                        Click="NewProfileButton_Click"
-                                                        Margin="5"/>
-                                                <Button Content="Edit"
-                                                        Click="EditProfileButton_Click"
-                                                        Margin="5"/>
-                                                <Button Content="Delete"
-                                                        Click="DeleteProfileButton_Click"
-                                                        Margin="5"/>
-                                                <Button Content="Set Active"
-                                                        Click="SetActiveProfileButton_Click"
-                                                        Margin="5"
-                                                        FontWeight="Bold"/>
-                                        </StackPanel>
+                                                <StackPanel Grid.Row="2"
+                                                            Orientation="Horizontal"
+                                                            HorizontalAlignment="Right"
+                                                            Margin="0,0,0,20">
+                                                        <Button Content="New"
+                                                                Click="NewProfileButton_Click"
+                                                                Margin="5"/>
+                                                        <Button Content="Edit"
+                                                                Click="EditProfileButton_Click"
+                                                                Margin="5"/>
+                                                        <Button Content="Delete"
+                                                                Click="DeleteProfileButton_Click"
+                                                                Margin="5"/>
+                                                        <Button Content="Set Active"
+                                                                Click="SetActiveProfileButton_Click"
+                                                                Margin="5"
+                                                                FontWeight="Bold"/>
+                                                </StackPanel>
 
-                                        <!-- Debug Settings Section -->
-                                        <GroupBox Grid.Row="3"
-                                                  Header="Debug Settings">
-                                                <Grid Margin="5">
-                                                        <Grid.RowDefinitions>
-                                                                <RowDefinition Height="Auto"/>
-                                                                <RowDefinition Height="Auto"/>
-                                                                <RowDefinition Height="Auto"/>
-                                                                <RowDefinition Height="Auto"/>
-                                                        </Grid.RowDefinitions>
-                                                        <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                                <ColumnDefinition Width="*"/>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                        </Grid.ColumnDefinitions>
-
-                                                        <!-- Save Debug Images Option -->
-                                                        <CheckBox Grid.Row="0"
-                                                                  Grid.Column="0"
-                                                                  x:Name="saveDebugImagesCheckbox"
-                                                                  Content="Save Debug Images"
-                                                                  Margin="0,5,10,5"
-                                                                  Click="DebugSettings_Changed"/>
-
-                                                        <!-- Verbose Logging Option -->
-                                                        <CheckBox Grid.Row="1"
-                                                                  Grid.Column="0"
-                                                                  x:Name="verboseLoggingCheckbox"
-                                                                  Content="Verbose Logging"
-                                                                  Margin="0,5,10,5"
-                                                                  Click="DebugSettings_Changed"/>
-
-                                                        <!-- Debug Images Folder -->
-                                                        <TextBlock Grid.Row="2"
-                                                                   Grid.Column="0"
-                                                                   Text="Debug Images Folder:"
-                                                                   VerticalAlignment="Center"
-                                                                   Margin="0,5,10,5"/>
-                                                        <TextBox Grid.Row="2"
-                                                                 Grid.Column="1"
-                                                                 x:Name="debugImagesFolderTextBox"
-                                                                 Text="DebugImages"
-                                                                 Margin="0,5,10,5"/>
-                                                        <Button Grid.Row="2"
-                                                                Grid.Column="2"
-                                                                Content="Browse"
-                                                                Click="BrowseDebugFolder_Click"
-                                                                Margin="0,5,0,5"/>
-
-                                                        <!-- Open Debug Folder Button -->
-                                                        <Button Grid.Row="3"
-                                                                Grid.Column="0"
-                                                                Grid.ColumnSpan="3"
-                                                                Content="Open Debug Images Folder"
-                                                                Click="OpenDebugFolder_Click"
-                                                                Margin="0,10,0,5"/>
-                                                </Grid>
-                                        </GroupBox>
-
-                                        <!-- Export Settings -->
-                                        <GroupBox Grid.Row="4"
-                                                  Header="Export Settings"
-                                                  Margin="5">
-                                                <StackPanel>
-                                                        <Label Content="Export Folder:"/>
-                                                        <Grid>
+                                                <!-- Debug Settings Section -->
+                                                <GroupBox Grid.Row="3"
+                                                          Header="Debug Settings">
+                                                        <Grid Margin="5">
+                                                                <Grid.RowDefinitions>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                </Grid.RowDefinitions>
                                                                 <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="*"/>
                                                                         <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
                                                                         <ColumnDefinition Width="Auto"/>
                                                                 </Grid.ColumnDefinitions>
 
-                                                                <TextBox x:Name="exportFolderTextBox"
-                                                                         Grid.Column="0"
-                                                                         Margin="5"
-                                                                         Text="{Binding Path=SettingsManager.Settings.ExportFolder, Mode=TwoWay}"/>
+                                                                <!-- Save Debug Images Option -->
+                                                                <CheckBox Grid.Row="0"
+                                                                          Grid.Column="0"
+                                                                          x:Name="saveDebugImagesCheckbox"
+                                                                          Content="Save Debug Images"
+                                                                          Margin="0,5,10,5"
+                                                                          Click="DebugSettings_Changed"/>
 
-                                                                <Button Grid.Column="1"
-                                                                        Content="Browse..."
-                                                                        Margin="5"
-                                                                        Width="80"
-                                                                        Click="BrowseExportFolder_Click"/>
+                                                                <!-- Verbose Logging Option -->
+                                                                <CheckBox Grid.Row="1"
+                                                                          Grid.Column="0"
+                                                                          x:Name="verboseLoggingCheckbox"
+                                                                          Content="Verbose Logging"
+                                                                          Margin="0,5,10,5"
+                                                                          Click="DebugSettings_Changed"/>
 
-                                                                <Button Grid.Column="2"
-                                                                        Content="Open Folder"
-                                                                        Margin="5"
-                                                                        Click="OpenExportFolder_Click"/>
+                                                                <!-- Debug Images Folder -->
+                                                                <TextBlock Grid.Row="2"
+                                                                           Grid.Column="0"
+                                                                           Text="Debug Images Folder:"
+                                                                           VerticalAlignment="Center"
+                                                                           Margin="0,5,10,5"/>
+                                                                <TextBox Grid.Row="2"
+                                                                         Grid.Column="1"
+                                                                         x:Name="debugImagesFolderTextBox"
+                                                                         Text="DebugImages"
+                                                                         Margin="0,5,10,5"/>
+                                                                <Button Grid.Row="2"
+                                                                        Grid.Column="2"
+                                                                        Content="Browse"
+                                                                        Click="BrowseDebugFolder_Click"
+                                                                        Margin="0,5,0,5"/>
+
+                                                                <!-- Open Debug Folder Button -->
+                                                                <Button Grid.Row="3"
+                                                                        Grid.Column="0"
+                                                                        Grid.ColumnSpan="3"
+                                                                        Content="Open Debug Images Folder"
+                                                                        Click="OpenDebugFolder_Click"
+                                                                        Margin="0,10,0,5"/>
                                                         </Grid>
+                                                </GroupBox>
 
-                                                        <Button Content="Save Settings"
-                                                                Margin="5"
-                                                                Width="120"
-                                                                HorizontalAlignment="Left"
-                                                                Click="SaveSettings_Click"/>
-                                                </StackPanel>
-                                        </GroupBox>
-                                </Grid>
+                                                <!-- Export Settings -->
+                                                <GroupBox Grid.Row="4"
+                                                          Header="Export Settings"
+                                                          Margin="5">
+                                                        <StackPanel>
+                                                                <Label Content="Export Folder:"/>
+                                                                <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <TextBox x:Name="exportFolderTextBox"
+                                                                                 Grid.Column="0"
+                                                                                 Margin="5"
+                                                                                 Text="{Binding Path=SettingsManager.Settings.ExportFolder, Mode=TwoWay}"/>
+
+                                                                        <Button Grid.Column="1"
+                                                                                Content="Browse..."
+                                                                                Margin="5"
+                                                                                Width="80"
+                                                                                Click="BrowseExportFolder_Click"/>
+
+                                                                        <Button Grid.Column="2"
+                                                                                Content="Open Folder"
+                                                                                Margin="5"
+                                                                                Click="OpenExportFolder_Click"/>
+                                                                </Grid>
+
+                                                                <!-- Save Settings button removed as settings are now auto-saved -->
+                                                        </StackPanel>
+                                                </GroupBox>
+                                        </Grid>
+                                </ScrollViewer>
                         </TabItem>
                 </TabControl>
 
