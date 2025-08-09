@@ -1,4 +1,5 @@
 ﻿using Serilog;
+using Serilog.Events;
 using System;
 using System.Windows;
 using BlackoutScanner.Infrastructure;
@@ -15,10 +16,15 @@ namespace BlackoutScanner
         {
             // Configure Serilog with UI sink BEFORE ServiceLocator
             Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Debug()
-                .WriteTo.File("logs/blackoutscanner-.log", rollingInterval: RollingInterval.Day)
-                .WriteTo.UI() // Add the UI sink here
+                .MinimumLevel.Verbose() // Log everything to file
+                .WriteTo.File("logs/blackoutscanner-.log", 
+                    rollingInterval: RollingInterval.Day,
+                    restrictedToMinimumLevel: LogEventLevel.Verbose) // Everything to file
+                .WriteTo.UI() // UI sink will filter based on UISink.MinimumLevel
                 .CreateLogger();
+            
+            // Set default UI log level
+            UISink.MinimumLevel = LogEventLevel.Information;
 
             try
             {

@@ -21,15 +21,77 @@ BlackoutScanner is designed to extract information from game windows using OCR (
 
 ### Prerequisites
 
-- Windows operating system
-- .NET Framework
+- Windows 10 or Windows 11 operating system
+- At least 4GB of free disk space for Visual Studio installation
+- Internet connection for downloading software
 - Supported games must be running in windowed mode for capture
 
 ### Installation
 
-1. Clone this repository or download the latest release
-2. Open the solution in Visual Studio
-3. Build and run the application
+Since there are no pre-built releases yet, you'll need to build the application from source. Don't worry - we'll guide you through each step!
+
+#### Step 1: Install Visual Studio Community (Free)
+
+1. Go to [https://visualstudio.microsoft.com/downloads/](https://visualstudio.microsoft.com/downloads/)
+2. Click the "Free download" button under **Visual Studio Community**
+3. Run the downloaded installer (`VisualStudioSetup.exe`)
+4. When the installer opens, you'll see a list of workloads. Check the box for:
+   - **.NET desktop development**
+5. On the right side, make sure these are checked:
+   - .NET Framework 4.8 development tools
+   - Windows Presentation Foundation (WPF)
+6. Click "Install" (this may take 15-30 minutes depending on your internet speed)
+7. Once installed, you can close Visual Studio if it opens automatically
+
+#### Step 2: Download the Source Code
+
+**Option A: Using Visual Studio's Built-in Git (Recommended)**
+1. Open **Visual Studio**
+2. On the start window, click "Clone a repository"
+3. In the "Repository location" field, paste:
+   ```
+   https://github.com/YourUsername/BlackoutScanner.git
+   ```
+4. Choose where you want to save it (like `C:\Users\YourUsername\Documents\`)
+5. Click "Clone"
+6. Visual Studio will download the code and open the project automatically
+
+**Option B: Download as ZIP**
+1. Go to the BlackoutScanner repository page on GitHub
+2. Click the green "Code" button
+3. Click "Download ZIP"
+4. Extract the ZIP file to a folder like `C:\Users\YourUsername\Documents\BlackoutScanner`
+5. Open Visual Studio and click "Open a project or solution"
+6. Navigate to the extracted folder and open the `.sln` file
+
+#### Step 3: Build and Run the Application
+
+1. Once the project is open in Visual Studio, wait for it to finish loading (you'll see activity in the bottom status bar)
+2. At the top of Visual Studio, find the dropdown that says either "Debug" or "Release" - change it to **Release**
+3. Press **Ctrl+Shift+B** or go to menu **Build → Build Solution**
+   - You'll see build output in the bottom panel
+   - Wait for it to say "Build succeeded"
+4. Press **F5** or click the green "Start" button to run the application
+
+#### Step 4: Create a Desktop Shortcut (Optional)
+
+After building successfully:
+1. In Visual Studio, right-click on the project name in Solution Explorer
+2. Select "Open Folder in File Explorer"
+3. Navigate to `bin\Release` folder
+4. Find `BlackoutScanner.exe`
+5. Right-click on it and select "Create shortcut"
+6. Move the shortcut to your desktop
+
+### Troubleshooting
+
+**"Build failed" errors:**
+- Make sure you selected **.NET desktop development** when installing Visual Studio
+- Try going to **Tools → NuGet Package Manager → Manage NuGet Packages for Solution** and click "Restore" if you see a restore button
+
+**"Cannot find the game window":**
+- Make sure your game is running in windowed mode (not fullscreen)
+- The game window title must match exactly what you enter in the profile
 
 ## Usage
 

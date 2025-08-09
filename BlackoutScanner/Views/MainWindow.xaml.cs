@@ -4,6 +4,7 @@ using BlackoutScanner.Models;
 using BlackoutScanner.Utilities;
 using Newtonsoft.Json;
 using Serilog;
+using Serilog.Events;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -63,7 +64,7 @@ namespace BlackoutScanner.Views
 
         // Debug settings
         private bool saveDebugImages = false;
-        private bool verboseLogging = false;
+        private string logLevel = "Information";
         private string debugImagesFolder = "DebugImages";
 
         private const string tessdataDirectory = "tessdata";
@@ -82,6 +83,31 @@ namespace BlackoutScanner.Views
 
         // Throttling for UI updates to prevent excessive operations
         private System.Windows.Threading.DispatcherTimer autoSizeTimer;
+        
+        // Method to handle log level selection changes
+        private void LogLevelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (sender is ComboBox comboBox && comboBox.SelectedItem is ComboBoxItem selectedItem)
+            {
+                var selectedLevel = selectedItem.Tag?.ToString() ?? "Information";
+                Log.Information($"Log level changed to: {selectedLevel}");
+                
+                if (SettingsManager != null)
+                {
+                    SettingsManager.Settings.LogLevel = selectedLevel;
+                    
+                    // Apply log level immediately
+                    if (Enum.TryParse<LogEventLevel>(selectedLevel, out var logEventLevel))
+                    {
+                        UISink.MinimumLevel = logEventLevel;
+                        Log.Information($"UI log level set to: {logEventLevel}");
+                    }
+                    
+                    // Save settings to persist the change
+                    SettingsManager.SaveSettings();
+                }
+            }
+        }
         private HashSet<DataGrid> dataGridsToResize = new HashSet<DataGrid>();
         private const int AutoSizeThrottleMilliseconds = 500; // Wait this long before resizing columns
 
@@ -95,6 +121,10 @@ namespace BlackoutScanner.Views
         {
             InitializeComponent();
             DataContext = this;
+            
+            // Set the window title with version information
+            var version = Utilities.VersionInfo.GetProductVersion();
+            this.Title = $"Blackout Scanner v{version}";
 
             // Set up logging for UI
             SetupLoggingToUI();
@@ -229,18 +259,20 @@ namespace BlackoutScanner.Views
                         ocrProcessor.LoadCache(cacheData);
 
                         // Update the Scanner with our debug settings - CRITICAL POINT
-                        Log.Information($"[InitializeAppComponents] About to update scanner settings: saveDebugImages={saveDebugImages}, verboseLogging={verboseLogging}");
+                        Log.Information($"[InitializeAppComponents] About to update scanner debug settings: saveDebugImages={saveDebugImages}, logLevel={logLevel}");
                         // Double-check current settings values from SettingsManager
                         if (SettingsManager != null)
                         {
                             Log.Information($"[InitializeAppComponents] Current SettingsManager.Settings.SaveDebugImages={SettingsManager.Settings.SaveDebugImages}");
                             // Re-sync our local values with SettingsManager to ensure consistency
                             saveDebugImages = SettingsManager.Settings.SaveDebugImages;
-                            verboseLogging = SettingsManager.Settings.VerboseLogging;
-                            Log.Information($"[InitializeAppComponents] After re-sync: saveDebugImages={saveDebugImages}, verboseLogging={verboseLogging}");
+                            logLevel = SettingsManager.Settings.LogLevel;
+                            Log.Information($"[InitializeAppComponents] After re-sync: saveDebugImages={saveDebugImages}, logLevel={logLevel}");
                         }
-
-                        scanner.UpdateDebugSettings(saveDebugImages, verboseLogging, debugImagesFolder);
+                        
+                        // Convert log level to verbose boolean for scanner
+                        bool isVerbose = logLevel == "Verbose" || logLevel == "Debug";
+                        scanner.UpdateDebugSettings(saveDebugImages, isVerbose, debugImagesFolder);
                         Log.Information($"[InitializeAppComponents] Scanner debug settings updated");
                         SubscribeToScannerEvents();
 
@@ -848,7 +880,9 @@ namespace BlackoutScanner.Views
 
             if (profile == null) return;
 
-            Title = $"Blackout Scanner - {profile.ProfileName}";
+            // Get the version and update title with both version and profile
+            var version = Utilities.VersionInfo.GetProductVersion();
+            Title = $"Blackout Scanner v{version} - {profile.ProfileName}";
 
             // Create a tab for each category
             foreach (var category in profile.Categories)
@@ -1315,10 +1349,10 @@ namespace BlackoutScanner.Views
 
                 // Store settings values in local fields
                 saveDebugImages = SettingsManager.Settings.SaveDebugImages;
-                verboseLogging = SettingsManager.Settings.VerboseLogging;
+                logLevel = SettingsManager.Settings.LogLevel;
                 debugImagesFolder = SettingsManager.Settings.DebugImagesFolder;
 
-                Log.Information($"[LoadDebugSettingsFromManager] Debug settings loaded from SettingsManager: saveImages={saveDebugImages}, verbose={verboseLogging}, folder={debugImagesFolder}");
+                Log.Information($"[LoadDebugSettingsFromManager] Debug settings loaded from SettingsManager: saveImages={saveDebugImages}, logLevel={logLevel}, folder={debugImagesFolder}");
 
                 // Update UI to reflect loaded settings - do this on UI thread
                 Dispatcher.Invoke(() =>
@@ -1327,7 +1361,7 @@ namespace BlackoutScanner.Views
                     {
                         // Find the UI elements by name
                         var saveImagesCheckbox = this.FindName("saveDebugImagesCheckbox") as CheckBox;
-                        var verboseCheckbox = this.FindName("verboseLoggingCheckbox") as CheckBox;
+                        var logLevelCombo = this.FindName("logLevelComboBox") as ComboBox;
                         var debugFolderTextBox = this.FindName("debugImagesFolderTextBox") as TextBox;
 
                         // Update checkboxes if available
@@ -1344,16 +1378,27 @@ namespace BlackoutScanner.Views
                             Log.Warning("[LoadDebugSettingsFromManager] saveDebugImagesCheckbox not found, cannot update UI");
                         }
 
-                        if (verboseCheckbox != null)
+                        // Update log level combo box
+                        if (logLevelCombo != null)
                         {
-                            verboseCheckbox.Click -= DebugSettings_Changed;
-                            verboseCheckbox.IsChecked = verboseLogging;
-                            verboseCheckbox.Click += DebugSettings_Changed;
-                            Log.Information($"[LoadDebugSettingsFromManager] Updated verboseLoggingCheckbox.IsChecked={verboseCheckbox.IsChecked}");
+                            logLevelCombo.SelectionChanged -= LogLevelComboBox_SelectionChanged;
+                            
+                            // Find and select the matching item
+                            foreach (ComboBoxItem item in logLevelCombo.Items)
+                            {
+                                if (item.Tag?.ToString() == logLevel)
+                                {
+                                    logLevelCombo.SelectedItem = item;
+                                    break;
+                                }
+                            }
+                            
+                            logLevelCombo.SelectionChanged += LogLevelComboBox_SelectionChanged;
+                            Log.Information($"[LoadDebugSettingsFromManager] Updated logLevelComboBox selection to {logLevel}");
                         }
                         else
                         {
-                            Log.Warning("[LoadDebugSettingsFromManager] verboseLoggingCheckbox not found, cannot update UI");
+                            Log.Warning("[LoadDebugSettingsFromManager] logLevelComboBox not found, cannot update UI");
                         }
 
                         // Update text box if available
@@ -1376,8 +1421,11 @@ namespace BlackoutScanner.Views
                 // If scanner is available, update its settings immediately
                 if (scanner != null)
                 {
-                    Log.Information($"[LoadDebugSettingsFromManager] Updating scanner debug settings: saveDebugImages={saveDebugImages}");
-                    scanner.UpdateDebugSettings(saveDebugImages, verboseLogging, debugImagesFolder);
+                    // We'll convert 'false' for verbose to match the new log level system
+                    bool isVerbose = logLevel == "Verbose" || logLevel == "Debug";
+                    
+                    Log.Information($"[LoadDebugSettingsFromManager] Updating scanner debug settings: saveDebugImages={saveDebugImages}, isVerbose={isVerbose}");
+                    scanner.UpdateDebugSettings(saveDebugImages, isVerbose, debugImagesFolder);
                 }
                 else
                 {
@@ -1395,7 +1443,7 @@ namespace BlackoutScanner.Views
             try
             {
                 Log.Information($"[SaveDebugSettings] Starting to save debug settings...");
-                Log.Information($"[SaveDebugSettings] Current values: saveDebugImages={saveDebugImages}, verboseLogging={verboseLogging}, debugImagesFolder={debugImagesFolder}");
+                Log.Information($"[SaveDebugSettings] Current values: saveDebugImages={saveDebugImages}, logLevel={logLevel}, debugImagesFolder={debugImagesFolder}");
 
                 if (SettingsManager != null)
                 {
@@ -1404,7 +1452,7 @@ namespace BlackoutScanner.Views
 
                     // Update settings in the manager
                     SettingsManager.Settings.SaveDebugImages = saveDebugImages;
-                    SettingsManager.Settings.VerboseLogging = verboseLogging;
+                    SettingsManager.Settings.LogLevel = logLevel;
                     SettingsManager.Settings.DebugImagesFolder = debugImagesFolder;
 
                     // Log after updating
@@ -1428,15 +1476,18 @@ namespace BlackoutScanner.Views
                 // Update the Scanner's debug settings
                 if (scanner != null)
                 {
-                    Log.Information($"[SaveDebugSettings] Updating scanner debug settings: saveDebugImages={saveDebugImages}");
-                    scanner.UpdateDebugSettings(saveDebugImages, verboseLogging, debugImagesFolder);
+                    // Convert log level to verbose boolean for scanner
+                    bool isVerbose = logLevel == "Verbose" || logLevel == "Debug";
+                    
+                    Log.Information($"[SaveDebugSettings] Updating scanner debug settings: saveDebugImages={saveDebugImages}, isVerbose={isVerbose}");
+                    scanner.UpdateDebugSettings(saveDebugImages, isVerbose, debugImagesFolder);
                 }
                 else
                 {
                     Log.Warning("[SaveDebugSettings] Scanner is null, cannot update scanner settings");
                 }
 
-                Log.Information($"[SaveDebugSettings] Debug settings updated: saveImages={saveDebugImages}, verbose={verboseLogging}, folder={debugImagesFolder}");
+                Log.Information($"[SaveDebugSettings] Debug settings updated: saveImages={saveDebugImages}, logLevel={logLevel}, folder={debugImagesFolder}");
             }
             catch (Exception ex)
             {
@@ -1473,9 +1524,13 @@ namespace BlackoutScanner.Views
                         // Also make sure scanner has the correct settings
                         if (scanner != null)
                         {
+                            // Convert log level to verbose boolean for scanner
+                            bool isVerbose = SettingsManager.Settings.LogLevel == "Verbose" || 
+                                           SettingsManager.Settings.LogLevel == "Debug";
+                                           
                             scanner.UpdateDebugSettings(
                                 SettingsManager.Settings.SaveDebugImages,
-                                SettingsManager.Settings.VerboseLogging,
+                                isVerbose,
                                 SettingsManager.Settings.DebugImagesFolder);
                         }
                     }
@@ -1567,7 +1622,7 @@ namespace BlackoutScanner.Views
             {
                 // Set to default values
                 SettingsManager.Settings.SaveDebugImages = false;
-                SettingsManager.Settings.VerboseLogging = false;
+                SettingsManager.Settings.LogLevel = "Information";
                 SettingsManager.Settings.DebugImagesFolder = "DebugImages";
 
                 // Save the reset settings
@@ -1575,7 +1630,7 @@ namespace BlackoutScanner.Views
 
                 // Update local fields
                 saveDebugImages = false;
-                verboseLogging = false;
+                logLevel = "Information";
                 debugImagesFolder = "DebugImages";
 
                 // Update UI
@@ -1612,15 +1667,6 @@ namespace BlackoutScanner.Views
                         settingsChanged = true;
                     }
                 }
-                else if (settingName == "Verbose Logging")
-                {
-                    Log.Information($"[DebugSettings_Changed] Changing verboseLogging from {verboseLogging} to {newValue}");
-                    if (verboseLogging != newValue)
-                    {
-                        verboseLogging = newValue;
-                        settingsChanged = true;
-                    }
-                }
 
                 if (settingsChanged)
                 {
@@ -1630,8 +1676,9 @@ namespace BlackoutScanner.Views
                     // Also directly update the scanner if available - don't wait for next scan
                     if (scanner != null)
                     {
-                        Log.Information($"[DebugSettings_Changed] Directly updating scanner with new settings: saveDebugImages={saveDebugImages}");
-                        scanner.UpdateDebugSettings(saveDebugImages, verboseLogging, debugImagesFolder);
+                        bool isVerbose = logLevel == "Verbose" || logLevel == "Debug";
+                        Log.Information($"[DebugSettings_Changed] Directly updating scanner with new settings: saveDebugImages={saveDebugImages}, isVerbose={isVerbose}");
+                        scanner.UpdateDebugSettings(saveDebugImages, isVerbose, debugImagesFolder);
                     }
                     else
                     {

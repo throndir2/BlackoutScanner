@@ -1,1 +1,29 @@
-I did some code changes
+```markdown
+# Blackout Scanner Changelog
+
+## [Unreleased]
+
+## [2.0.2] - 2025-08-09
+
+### Changed
+- Replaced "Verbose Logging" with configurable "Log Level" parameter
+- Log level control allows selection from Verbose, Debug, Information, Warning, Error, and Fatal levels
+- All logs still recorded to file regardless of UI log level setting
+
+### Added
+- Version information embedded in executable file
+- Window title now shows application version number
+
+## [2.0.1] - 2025-08-09
+
+### Fixed
+- Game Profiles list not visible when app height reduced
+- App settings values in appdata are not reflected in the UI causing confusion
+
+### Added
+- Image comparison mode for scanning, now set as default
+- UI improvements in configuration menu
+
+### Known Issues
+- Editing key fields results in duplicates data entries
+```

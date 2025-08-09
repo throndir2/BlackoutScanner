@@ -8,7 +8,7 @@ namespace BlackoutScanner.Models
     {
         private string _exportFolder = "Exports";
         private bool _saveDebugImages = false;
-        private bool _verboseLogging = false;
+        private string _logLevel = "Information";
         private string _debugImagesFolder = "DebugImages";
 
         public string ExportFolder
@@ -37,14 +37,14 @@ namespace BlackoutScanner.Models
             }
         }
 
-        public bool VerboseLogging
+        public string LogLevel
         {
-            get => _verboseLogging;
+            get => _logLevel;
             set
             {
-                if (_verboseLogging != value)
+                if (_logLevel != value)
                 {
-                    _verboseLogging = value;
+                    _logLevel = value;
                     OnPropertyChanged();
                 }
             }

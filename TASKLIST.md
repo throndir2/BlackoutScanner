@@ -91,3 +91,26 @@
 - [x] Create window search dialog for finding and selecting game windows
 - [x] Add an interactive area selection tool for defining capture regions
 - [x] Add profile comparison converter for active profile indication
+- [x] Image comparison mode for scanning, set as default
+- [x] UI improvements in configuration menu
+
+## Bug Fixes (2025-08-09)
+- [x] Game Profiles list not visible when app height reduced
+- [x] App settings values in appdata are not reflected in the UI causing confusion
+
+## Known Issues
+- [ ] Editing key fields results in duplicates data entries
+
+## Upcoming Features
+- [ ] Include validation when defining an area, with "Category name does not equal <text found>" warning
+- [ ] Multi-object scan (leaderboards)
+- [ ] Autostop scan when modifying name/invalid OCR, and restart on Save click
+- [ ] Category scanning optional requirement for pixel color
+- [ ] Hotkey to stop/start scan
+- [ ] Language configuration
+- [ ] Fallback OCR must be a configurable option, default false, as it adds too much time with little gain
+- [ ] Configurable OCR Threshhold, anything below will be considered no detection
+- [ ] Linking categories together (Chieftain page to More Info page)
+- [ ] Package to singular EXE
+- [ ] Include Help text
+- [ ] Submit file to Microsoft security

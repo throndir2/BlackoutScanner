@@ -1,7 +1,9 @@
 using BlackoutScanner.Models;
 using BlackoutScanner.Interfaces;
+using BlackoutScanner.Infrastructure;
 using Newtonsoft.Json;
 using Serilog;
+using Serilog.Events;
 using System;
 using System.IO;
 
@@ -45,7 +47,7 @@ namespace BlackoutScanner.Services
                     var loadedSettings = JsonConvert.DeserializeObject<AppSettings>(json);
                     if (loadedSettings != null)
                     {
-                        Log.Information($"[SettingsManager.LoadSettings] Deserialized settings: SaveDebugImages={loadedSettings.SaveDebugImages}, VerboseLogging={loadedSettings.VerboseLogging}");
+                        Log.Information($"[SettingsManager.LoadSettings] Deserialized settings: SaveDebugImages={loadedSettings.SaveDebugImages}, LogLevel={loadedSettings.LogLevel}");
 
                         _settings = loadedSettings;
                         Log.Information($"[SettingsManager.LoadSettings] Settings loaded from {_settingsFilePath}");
@@ -63,14 +65,28 @@ namespace BlackoutScanner.Services
                     Log.Information("[SettingsManager.LoadSettings] Default settings created");
                 }
 
+                // Apply log level to UI sink
+                if (Enum.TryParse<LogEventLevel>(_settings.LogLevel, out var logLevel))
+                {
+                    UISink.MinimumLevel = logLevel;
+                    Log.Information($"[SettingsManager.LoadSettings] UI log level set to: {logLevel}");
+                }
+
                 // Log the state of settings after loading
-                Log.Information($"[SettingsManager.LoadSettings] Current settings state: SaveDebugImages={_settings.SaveDebugImages}, VerboseLogging={_settings.VerboseLogging}");
+                Log.Information($"[SettingsManager.LoadSettings] Current settings state: SaveDebugImages={_settings.SaveDebugImages}, LogLevel={_settings.LogLevel}");
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "[SettingsManager.LoadSettings] Failed to load settings, using defaults");
                 _settings = new AppSettings();
-                Log.Information($"[SettingsManager.LoadSettings] Created new default settings: SaveDebugImages={_settings.SaveDebugImages}, VerboseLogging={_settings.VerboseLogging}");
+                
+                // Apply default log level
+                if (Enum.TryParse<LogEventLevel>(_settings.LogLevel, out var logLevel))
+                {
+                    UISink.MinimumLevel = logLevel;
+                }
+                
+                Log.Information($"[SettingsManager.LoadSettings] Created new default settings: SaveDebugImages={_settings.SaveDebugImages}, LogLevel={_settings.LogLevel}");
             }
         }
 
@@ -79,7 +95,14 @@ namespace BlackoutScanner.Services
             try
             {
                 Log.Information($"[SettingsManager.SaveSettings] Starting to save settings...");
-                Log.Information($"[SettingsManager.SaveSettings] Current settings: SaveDebugImages={_settings.SaveDebugImages}, VerboseLogging={_settings.VerboseLogging}");
+                Log.Information($"[SettingsManager.SaveSettings] Current settings: SaveDebugImages={_settings.SaveDebugImages}, LogLevel={_settings.LogLevel}");
+
+                // Apply log level to UI sink immediately when saving
+                if (Enum.TryParse<LogEventLevel>(_settings.LogLevel, out var logLevel))
+                {
+                    UISink.MinimumLevel = logLevel;
+                    Log.Information($"[SettingsManager.SaveSettings] UI log level set to: {logLevel}");
+                }
 
                 var json = JsonConvert.SerializeObject(_settings, Formatting.Indented);
                 Log.Debug($"[SettingsManager.SaveSettings] Settings JSON to save: {json}");

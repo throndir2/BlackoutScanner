@@ -116,7 +116,8 @@ namespace BlackoutScanner.Services
             // Get settings from SettingsManager instead of hardcoding
             bool saveDebugImages = _settingsManager?.Settings.SaveDebugImages ?? false;
             string debugImagesFolder = _settingsManager?.Settings.DebugImagesFolder ?? "DebugImages";
-            bool verboseLogging = _settingsManager?.Settings.VerboseLogging ?? false;
+            string logLevel = _settingsManager?.Settings.LogLevel ?? "Information";
+            bool verboseLogging = logLevel == "Verbose" || logLevel == "Debug";
 
             // Add detailed logging
             Log.Information($"[OCRProcessor.SaveDebugImage] Called for category='{category}', field='{fieldName}'");
@@ -227,7 +228,8 @@ namespace BlackoutScanner.Services
             bool numericalOnly = false;
             bool saveDebugImages = _settingsManager?.Settings.SaveDebugImages ?? false;
             string debugImagesFolder = _settingsManager?.Settings.DebugImagesFolder ?? "DebugImages";
-            bool verboseLogging = _settingsManager?.Settings.VerboseLogging ?? false;
+            string logLevel = _settingsManager?.Settings.LogLevel ?? "Information";
+            bool verboseLogging = logLevel == "Verbose" || logLevel == "Debug";
 
             Log.Debug($"[OCRProcessor.ProcessImage] saveDebugImages={saveDebugImages} from SettingsManager");
             if (_settingsManager != null)
