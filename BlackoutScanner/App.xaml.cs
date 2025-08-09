@@ -13,8 +13,6 @@ namespace BlackoutScanner
     {
         protected override void OnStartup(StartupEventArgs e)
         {
-            base.OnStartup(e);
-
             // Configure Serilog with UI sink BEFORE ServiceLocator
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
@@ -22,10 +20,21 @@ namespace BlackoutScanner
                 .WriteTo.UI() // Add the UI sink here
                 .CreateLogger();
 
-            // Configure ServiceLocator after Serilog
-            ServiceLocator.Configure();
+            try
+            {
+                base.OnStartup(e);
 
-            SetProcessDpiAwareness();
+                // Configure ServiceLocator after Serilog
+                ServiceLocator.Configure();
+
+                SetProcessDpiAwareness();
+            }
+            catch (Exception ex)
+            {
+                Log.Fatal(ex, "Application failed to start");
+                MessageBox.Show($"Failed to start: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Shutdown(1);
+            }
         }
 
         private void SetProcessDpiAwareness()
