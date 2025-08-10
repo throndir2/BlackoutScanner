@@ -1,6 +1,14 @@
 ```markdown
 # Blackout Scanner Changelog
 
+## [2.0.3] - 2025-08-10
+
+### Added
+- Configurable hotkey to start and stop scanning
+- Default hotkey set to Ctrl+Q
+- Hotkey configuration UI in the Configuration tab
+- Global hotkey works even when application is not in focus
+
 ## [2.0.2] - 2025-08-09
 
 ### Fixed

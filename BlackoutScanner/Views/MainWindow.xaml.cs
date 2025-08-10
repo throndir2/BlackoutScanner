@@ -1,6 +1,7 @@
 ﻿using BlackoutScanner.Interfaces;
 using BlackoutScanner.Infrastructure;
 using BlackoutScanner.Models;
+using BlackoutScanner.Services;
 using BlackoutScanner.Utilities;
 using Newtonsoft.Json;
 using Serilog;
@@ -18,6 +19,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using WinImage = System.Windows.Controls.Image;
@@ -34,6 +36,8 @@ namespace BlackoutScanner.Views
         private IOCRProcessor? ocrProcessor;
         private IGameProfileManager? _gameProfileManager;
         private ISettingsManager? _settingsManager;
+        private IHotKeyManager? _hotKeyManager;
+        private bool _isCapturingHotKey = false;
 
         public IGameProfileManager? GameProfileManager
         {
@@ -140,6 +144,9 @@ namespace BlackoutScanner.Views
             autoSizeTimer.Interval = TimeSpan.FromMilliseconds(AutoSizeThrottleMilliseconds);
             autoSizeTimer.Tick += AutoSizeTimer_Tick;
 
+            // MainWindow_Loaded event handler will initialize the hotkey manager
+            this.Loaded += MainWindow_Loaded;
+
             this.Show();
 
             // Then, start the initialization in the background
@@ -194,6 +201,7 @@ namespace BlackoutScanner.Views
                 dataManager = ServiceLocator.GetService<IDataManager>();
                 GameProfileManager = ServiceLocator.GetService<IGameProfileManager>();
                 SettingsManager = ServiceLocator.GetService<ISettingsManager>();
+                _hotKeyManager = ServiceLocator.GetService<IHotKeyManager>();
 
                 Log.Information($"[InitializeAppComponents] Got services, about to load settings");
 
@@ -1808,6 +1816,9 @@ namespace BlackoutScanner.Views
             // Unsubscribe from UI logging
             BlackoutScanner.Infrastructure.UISink.LogMessage -= OnLogMessage;
 
+            // Dispose of the hotkey manager
+            _hotKeyManager?.Dispose();
+
             SaveOcrResultsCache();
 
             base.OnClosed(e);
@@ -1877,5 +1888,230 @@ namespace BlackoutScanner.Views
             var safeFileName = string.Join("_", fileName.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
             return safeFileName.Replace(" ", "_");
         }
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            Log.Debug("MainWindow_Loaded event triggered");
+            
+            // Delay the hotkey initialization to ensure everything is ready
+            this.Dispatcher.BeginInvoke(new Action(() => 
+            {
+                InitializeHotKey();
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+        
+        private void InitializeHotKey()
+        {
+            Log.Debug("InitializeHotKey called");
+            
+            // If hotkey manager isn't available yet, try to get it from the service locator
+            if (_hotKeyManager == null)
+            {
+                if (ServiceLocator.IsInitialized)
+                {
+                    try
+                    {
+                        _hotKeyManager = ServiceLocator.GetService<IHotKeyManager>();
+                        Log.Debug("Retrieved HotKeyManager from ServiceLocator in InitializeHotKey");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Failed to get HotKeyManager from ServiceLocator");
+                        return;
+                    }
+                }
+                else
+                {
+                    Log.Debug("ServiceLocator not initialized yet, scheduling retry");
+                    // Retry after a short delay
+                    this.Dispatcher.BeginInvoke(new Action(() => 
+                    {
+                        InitializeHotKey();
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                    return;
+                }
+            }
+            
+            if (_hotKeyManager != null)
+            {
+                Log.Debug("Initializing HotKeyManager with window handle");
+                _hotKeyManager.Initialize(this);
+
+                // Load and register the saved hotkey
+                string hotKey = "Ctrl+Q"; // Default
+                
+                if (SettingsManager != null)
+                {
+                    hotKey = SettingsManager.Settings.HotKey;
+                    Log.Debug($"Loading saved hotkey from settings: {hotKey}");
+                }
+                else
+                {
+                    Log.Debug("SettingsManager not available, using default hotkey");
+                }
+                
+                // Update the UI
+                if (this.FindName("HotKeyTextBox") is TextBox hotKeyTextBox)
+                {
+                    hotKeyTextBox.Text = hotKey;
+                    Log.Debug($"Updated HotKeyTextBox with: {hotKey}");
+                }
+                
+                // Register the hotkey
+                RegisterHotKey(hotKey);
+            }
+            else
+            {
+                Log.Warning("HotKeyManager is not available. Hot keys will not work.");
+            }
+        }
+
+        private void RegisterHotKey(string hotKeyString)
+        {
+            if (_hotKeyManager == null)
+            {
+                Log.Warning("Cannot register hotkey: HotKeyManager is not available");
+                return;
+            }
+            
+            Log.Debug($"Attempting to register hotkey: {hotKeyString}");
+            
+            if (string.IsNullOrWhiteSpace(hotKeyString))
+            {
+                Log.Warning("Hotkey string is empty or null, cannot register");
+                return;
+            }
+
+            if (_hotKeyManager.RegisterHotKey(hotKeyString, () =>
+            {
+                Log.Debug($"Hotkey {hotKeyString} triggered!");
+                
+                Dispatcher.Invoke(() =>
+                {
+                    // Toggle scanning
+                    if (isScanning)
+                    {
+                        Log.Debug("Hotkey stopping scan");
+                        // Use ScanButton_Click to stop scanning
+                        ScanButton_Click(this, new RoutedEventArgs());
+                    }
+                    else
+                    {
+                        Log.Debug("Hotkey starting scan");
+                        // Use ScanButton_Click to start scanning
+                        ScanButton_Click(this, new RoutedEventArgs());
+                    }
+                });
+            }))
+            {
+                // Save the hotkey if registration successful
+                if (SettingsManager != null)
+                {
+                    SettingsManager.Settings.HotKey = hotKeyString;
+                    SettingsManager.SaveSettings();
+                }
+                Log.Information($"Successfully registered hotkey: {hotKeyString}");
+            }
+            else
+            {
+                MessageBox.Show($"Failed to register hotkey: {hotKeyString}\n\nThis might happen if another application is using this hotkey combination.", 
+                              "Hotkey Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                Log.Warning($"Failed to register hotkey: {hotKeyString}");
+            }
+        }
+
+        private void HotKeyTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (!_isCapturingHotKey)
+                return;
+
+            e.Handled = true;
+
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+            // Ignore modifier keys alone
+            if (key == Key.LeftCtrl || key == Key.RightCtrl ||
+                key == Key.LeftAlt || key == Key.RightAlt ||
+                key == Key.LeftShift || key == Key.RightShift ||
+                key == Key.LWin || key == Key.RWin)
+            {
+                return;
+            }
+
+            // Build the hotkey string
+            var hotKeyString = "";
+
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                hotKeyString += "Ctrl+";
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+                hotKeyString += "Alt+";
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+                hotKeyString += "Shift+";
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Windows))
+                hotKeyString += "Win+";
+
+            hotKeyString += key.ToString();
+
+            if (sender is TextBox hotKeyTextBox)
+            {
+                hotKeyTextBox.Text = hotKeyString;
+            }
+
+            RegisterHotKey(hotKeyString);
+        }
+
+        private void HotKeyTextBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            _isCapturingHotKey = true;
+
+            if (sender is TextBox hotKeyTextBox)
+            {
+                hotKeyTextBox.Text = "Press keys...";
+                hotKeyTextBox.SelectAll();
+            }
+        }
+
+        private void HotKeyTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            _isCapturingHotKey = false;
+
+            if (sender is TextBox hotKeyTextBox)
+            {
+                // Restore the current hotkey if nothing was entered
+                if (string.IsNullOrWhiteSpace(hotKeyTextBox.Text) || hotKeyTextBox.Text == "Press keys...")
+                {
+                    if (SettingsManager != null)
+                    {
+                        hotKeyTextBox.Text = SettingsManager.Settings.HotKey;
+                    }
+                    else
+                    {
+                        hotKeyTextBox.Text = "Ctrl+Q";
+                    }
+                }
+            }
+        }
+
+        private void SetDefaultHotKey_Click(object sender, RoutedEventArgs e)
+        {
+            const string defaultHotKey = "Ctrl+Q";
+
+            if (this.FindName("HotKeyTextBox") is TextBox hotKeyTextBox)
+            {
+                hotKeyTextBox.Text = defaultHotKey;
+            }
+            
+            // If hotkey manager is not available, try to initialize it first
+            if (_hotKeyManager == null)
+            {
+                Log.Debug("HotKeyManager not available when setting default hotkey, trying to initialize");
+                InitializeHotKey();
+            }
+            else
+            {
+                RegisterHotKey(defaultHotKey);
+            }
+        }
+        // OnClosed is already implemented in the class
     }
 }

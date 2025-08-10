@@ -50,9 +50,9 @@ Since there are no pre-built releases yet, you'll need to build the application 
 2. On the start window, click "Clone a repository"
 3. In the "Repository location" field, paste:
    ```
-   https://github.com/YourUsername/BlackoutScanner.git
+   https://github.com/throndir2/BlackoutScanner.git
    ```
-4. Choose where you want to save it (like `C:\Users\YourUsername\Documents\`)
+4. Choose where you want to save it (like `C:\Users\YourUsername\Documents\`) or use the default location
 5. Click "Clone"
 6. Visual Studio will download the code and open the project automatically
 
@@ -70,8 +70,8 @@ Since there are no pre-built releases yet, you'll need to build the application 
 2. At the top of Visual Studio, find the dropdown that says either "Debug" or "Release" - change it to **Release**
 3. Press **Ctrl+Shift+B** or go to menu **Build → Build Solution**
    - You'll see build output in the bottom panel
-   - Wait for it to say "Build succeeded"
-4. Press **F5** or click the green "Start" button to run the application
+   - Wait for it to say "Build succeeded"'
+4. Find `BlackoutScanner.exe` in the `bin\Release` folder, and run it
 
 #### Step 4: Create a Desktop Shortcut (Optional)
 
@@ -82,6 +82,13 @@ After building successfully:
 4. Find `BlackoutScanner.exe`
 5. Right-click on it and select "Create shortcut"
 6. Move the shortcut to your desktop
+
+#### Step 5: Updating
+
+1. Open the `.sln` file
+2. Go to the `Git Changes` tab next to `Solution Explorer`
+3. Find the down arrow symbol, hover over it to ensure it says `Pull`
+4. Click on it and it will pull from the `main` branch
 
 ### Troubleshooting
 

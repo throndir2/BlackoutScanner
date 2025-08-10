@@ -102,15 +102,18 @@
 - [ ] Editing key fields results in duplicates data entries
 
 ## Upcoming Features
-- [ ] Include validation when defining an area, with "Category name does not equal <text found>" warning
 - [ ] Multi-object scan (leaderboards)
 - [ ] Autostop scan when modifying name/invalid OCR, and restart on Save click
 - [ ] Category scanning optional requirement for pixel color
-- [ ] Hotkey to stop/start scan
+- [x] Hotkey to stop/start scan
+- [ ] Configurable displayed time
 - [ ] Language configuration
+- [ ] OCR configuration: confidence threshhold, fallback, etc
+- [ ] Move active profile txt file to use appsettings json instead
 - [ ] Fallback OCR must be a configurable option, default false, as it adds too much time with little gain
 - [ ] Configurable OCR Threshhold, anything below will be considered no detection
 - [ ] Linking categories together (Chieftain page to More Info page)
 - [ ] Package to singular EXE
 - [ ] Include Help text
 - [ ] Submit file to Microsoft security
+- [ ] Include validation when defining an area, with "Category name does not equal <text found>" warning

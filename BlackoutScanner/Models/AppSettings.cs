@@ -10,6 +10,7 @@ namespace BlackoutScanner.Models
         private bool _saveDebugImages = false;
         private string _logLevel = "Information";
         private string _debugImagesFolder = "DebugImages";
+        private string _hotKey = "Ctrl+Q";
 
         public string ExportFolder
         {
@@ -58,6 +59,19 @@ namespace BlackoutScanner.Models
                 if (_debugImagesFolder != value)
                 {
                     _debugImagesFolder = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string HotKey
+        {
+            get => _hotKey;
+            set
+            {
+                if (_hotKey != value)
+                {
+                    _hotKey = value;
                     OnPropertyChanged();
                 }
             }

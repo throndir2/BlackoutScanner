@@ -121,6 +121,7 @@
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
                                                 </Grid.RowDefinitions>
 
                                                 <!-- Game Profiles Section -->
@@ -242,17 +243,17 @@
                                                                                   Width="150"
                                                                                   SelectionChanged="LogLevelComboBox_SelectionChanged">
                                                                                 <ComboBoxItem Content="Verbose"
-                                                                                                Tag="Verbose"/>
+                                                                                              Tag="Verbose"/>
                                                                                 <ComboBoxItem Content="Debug"
-                                                                                                Tag="Debug"/>
+                                                                                              Tag="Debug"/>
                                                                                 <ComboBoxItem Content="Information"
-                                                                                                Tag="Information"/>
+                                                                                              Tag="Information"/>
                                                                                 <ComboBoxItem Content="Warning"
-                                                                                                Tag="Warning"/>
+                                                                                              Tag="Warning"/>
                                                                                 <ComboBoxItem Content="Error"
-                                                                                                Tag="Error"/>
+                                                                                              Tag="Error"/>
                                                                                 <ComboBoxItem Content="Fatal"
-                                                                                                Tag="Fatal"/>
+                                                                                              Tag="Fatal"/>
                                                                         </ComboBox>
                                                                 </StackPanel>
 
@@ -283,8 +284,38 @@
                                                         </Grid>
                                                 </GroupBox>
 
-                                                <!-- Export Settings -->
+                                                <!-- Hotkey Settings -->
                                                 <GroupBox Grid.Row="4"
+                                                          Header="Hotkey Settings"
+                                                          Margin="0,10,0,10">
+                                                        <Grid Margin="10">
+                                                                <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <TextBlock Grid.Column="0"
+                                                                           Text="Start/Stop Scan Hotkey:"
+                                                                           VerticalAlignment="Center"
+                                                                           Margin="0,0,10,0"/>
+
+                                                                <TextBox Grid.Column="1"
+                                                                         x:Name="HotKeyTextBox"
+                                                                         PreviewKeyDown="HotKeyTextBox_PreviewKeyDown"
+                                                                         GotFocus="HotKeyTextBox_GotFocus"
+                                                                         LostFocus="HotKeyTextBox_LostFocus"
+                                                                         Text="{Binding Path=SettingsManager.Settings.HotKey, Mode=TwoWay}"/>
+
+                                                                <Button Grid.Column="2"
+                                                                        Content="Set Default"
+                                                                        Margin="10,0,0,0"
+                                                                        Click="SetDefaultHotKey_Click"/>
+                                                        </Grid>
+                                                </GroupBox>
+
+                                                <!-- Export Settings -->
+                                                <GroupBox Grid.Row="5"
                                                           Header="Export Settings"
                                                           Margin="5">
                                                         <StackPanel>
