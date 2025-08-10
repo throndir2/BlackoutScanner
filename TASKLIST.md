@@ -101,19 +101,20 @@
 ## Known Issues
 - [ ] Editing key fields results in duplicates data entries
 
-## Upcoming Features
+## Upcoming Features for v2.0
 - [ ] Multi-object scan (leaderboards)
-- [ ] Autostop scan when modifying name/invalid OCR, and restart on Save click
-- [ ] Category scanning optional requirement for pixel color
+- [x] Autostop scan when modifying name/invalid OCR, and restart on Save click
 - [x] Hotkey to stop/start scan
-- [ ] Configurable displayed time
+- [x] Configurable displayed time (local time option for exports)
 - [ ] Language configuration
 - [ ] OCR configuration: confidence threshhold, fallback, etc
 - [ ] Move active profile txt file to use appsettings json instead
 - [ ] Fallback OCR must be a configurable option, default false, as it adds too much time with little gain
 - [ ] Configurable OCR Threshhold, anything below will be considered no detection
 - [ ] Linking categories together (Chieftain page to More Info page)
+- [ ] Do a OCR scan after a user defines an area, so they have an idea of what is scanned. Eg, a new 'Preview Result' field.
 - [ ] Package to singular EXE
 - [ ] Include Help text
 - [ ] Submit file to Microsoft security
 - [ ] Include validation when defining an area, with "Category name does not equal <text found>" warning
+- [ ] Category scanning optional requirement for pixel color

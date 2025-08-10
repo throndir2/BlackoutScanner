@@ -1,5 +1,6 @@
 ﻿using BlackoutScanner.Interfaces;
 using BlackoutScanner.Models;
+using BlackoutScanner.Utilities;
 using Newtonsoft.Json;
 using Serilog;
 using System.IO;
@@ -138,6 +139,14 @@ namespace BlackoutScanner
         {
             try
             {
+                // Get the UseLocalTimeInExports setting
+                bool useLocalTime = false;
+                if (ServiceLocator.IsInitialized)
+                {
+                    var settingsManager = ServiceLocator.GetService<ISettingsManager>();
+                    useLocalTime = settingsManager?.Settings?.UseLocalTimeInExports ?? false;
+                }
+
                 // Generate filename with profile name
                 string safeProfileName = GetSafeFileName(profile.ProfileName);
 
@@ -149,10 +158,37 @@ namespace BlackoutScanner
 
                 string jsonFileName = Path.Combine(directory, $"data_records_{safeProfileName}.json");
 
-                string jsonData = JsonConvert.SerializeObject(DataRecordDictionary.Values, Formatting.Indented);
+                // Create a copy of the records with adjusted timestamps if needed
+                var recordsToExport = DataRecordDictionary.Values.Select(r =>
+                {
+                    if (!useLocalTime)
+                        return r; // Return original if using UTC
+
+                    // Create a modified copy with local time
+                    var copy = new DataRecord
+                    {
+                        Category = r.Category,
+                        GameProfile = r.GameProfile,
+                        Fields = new Dictionary<string, object>(r.Fields),
+                        ScanDate = r.ScanDate.ToLocalTime() // Convert to local time
+                    };
+                    return copy;
+                }).ToList();
+
+                // Add export metadata
+                var exportData = new
+                {
+                    Profile = profile.ProfileName,
+                    ExportDate = useLocalTime ? DateTime.Now : DateTime.UtcNow,
+                    TimeFormat = useLocalTime ? "Local" : "UTC",
+                    Records = recordsToExport
+                };
+
+                string jsonData = JsonConvert.SerializeObject(exportData, Formatting.Indented);
                 _fileSystem.WriteAllText(jsonFileName, jsonData);
 
-                Log.Information($"JSON data records saved successfully for profile '{profile.ProfileName}' to {jsonFileName}.");
+                string timeFormat = useLocalTime ? "Local time" : "UTC";
+                Log.Information($"JSON data records saved successfully for profile '{profile.ProfileName}' to {jsonFileName} ({timeFormat}).");
                 hasUnsavedChanges = false; // Reset after save
             }
             catch (Exception ex)
@@ -165,8 +201,16 @@ namespace BlackoutScanner
         {
             try
             {
+                // Get the UseLocalTimeInExports setting
+                bool useLocalTime = false;
+                if (ServiceLocator.IsInitialized)
+                {
+                    var settingsManager = ServiceLocator.GetService<ISettingsManager>();
+                    useLocalTime = settingsManager?.Settings?.UseLocalTimeInExports ?? false;
+                }
+
                 // Generate TSV files per category
-                SaveTsvFilesByCategory(DataRecordDictionary.Values.ToList(), profile, exportPath);
+                SaveTsvFilesByCategory(DataRecordDictionary.Values.ToList(), profile, exportPath, useLocalTime);
 
                 Log.Information($"TSV data records saved successfully for profile '{profile.ProfileName}'.");
                 hasUnsavedChanges = false; // Reset after save
@@ -184,7 +228,7 @@ namespace BlackoutScanner
             SaveDataRecordsAsTsv(profile, exportPath);
         }
 
-        private void SaveTsvFilesByCategory(List<DataRecord> dataList, GameProfile profile, string? exportPath = null)
+        private void SaveTsvFilesByCategory(List<DataRecord> dataList, GameProfile profile, string? exportPath = null, bool useLocalTime = false)
         {
             // Use the export path if provided
             string directory = exportPath ?? Directory.GetCurrentDirectory();
@@ -212,14 +256,15 @@ namespace BlackoutScanner
                 var category = profile.Categories.FirstOrDefault(c => c.Name == categoryName);
                 if (category != null)
                 {
-                    string tsvContent = ConvertCategoryRecordsToTsv(categoryRecords, category);
+                    string tsvContent = ConvertCategoryRecordsToTsv(categoryRecords, category, useLocalTime);
                     _fileSystem.WriteAllText(tsvFileName, tsvContent);
-                    Log.Information($"Saved TSV for category '{categoryName}' in profile '{profile.ProfileName}' to {tsvFileName}");
+                    string timeFormat = useLocalTime ? "Local time" : "UTC";
+                    Log.Information($"Saved TSV for category '{categoryName}' in profile '{profile.ProfileName}' to {tsvFileName} ({timeFormat})");
                 }
             }
         }
 
-        private string ConvertCategoryRecordsToTsv(List<DataRecord> records, CaptureCategory category)
+        private string ConvertCategoryRecordsToTsv(List<DataRecord> records, CaptureCategory category, bool useLocalTime = false)
         {
             var sb = new StringBuilder();
             var headers = new List<string>();
@@ -240,7 +285,9 @@ namespace BlackoutScanner
                 {
                     if (header == "ScanDate")
                     {
-                        values.Add(record.ScanDate.ToString("g"));
+                        // Convert to local time if specified
+                        var scanDate = useLocalTime ? record.ScanDate.ToLocalTime() : record.ScanDate;
+                        values.Add(scanDate.ToString("yyyy-MM-dd HH:mm:ss"));
                     }
                     else if (record.Fields.TryGetValue(header, out var value))
                     {

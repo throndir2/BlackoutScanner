@@ -11,6 +11,7 @@ namespace BlackoutScanner.Models
         private string _logLevel = "Information";
         private string _debugImagesFolder = "DebugImages";
         private string _hotKey = "Ctrl+Q";
+        private bool _useLocalTimeInExports = false;
 
         public string ExportFolder
         {
@@ -20,6 +21,19 @@ namespace BlackoutScanner.Models
                 if (_exportFolder != value)
                 {
                     _exportFolder = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool UseLocalTimeInExports
+        {
+            get => _useLocalTimeInExports;
+            set
+            {
+                if (_useLocalTimeInExports != value)
+                {
+                    _useLocalTimeInExports = value;
                     OnPropertyChanged();
                 }
             }

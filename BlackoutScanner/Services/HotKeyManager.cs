@@ -30,26 +30,26 @@ namespace BlackoutScanner.Services
                 Log.Error("Cannot initialize HotKeyManager: window is null");
                 return;
             }
-            
+
             var helper = new WindowInteropHelper(window);
-            
+
             // Ensure we have a handle
             if (helper.Handle == IntPtr.Zero)
             {
                 Log.Debug("Window handle not available, ensuring handle creation");
                 helper.EnsureHandle();
             }
-            
+
             _windowHandle = helper.Handle;
-            
+
             if (_windowHandle == IntPtr.Zero)
             {
                 Log.Error("Failed to get window handle even after EnsureHandle");
                 return;
             }
-            
+
             _source = HwndSource.FromHwnd(_windowHandle);
-            
+
             if (_source != null)
             {
                 _source.AddHook(HwndHook);
@@ -64,7 +64,7 @@ namespace BlackoutScanner.Services
         public bool RegisterHotKey(string hotKeyString, Action action)
         {
             UnregisterCurrentHotKey();
-            
+
             if (!ParseHotKey(hotKeyString, out uint modifiers, out uint key))
             {
                 Log.Error($"Failed to parse hotkey string: {hotKeyString}");
@@ -73,9 +73,9 @@ namespace BlackoutScanner.Services
 
             _registeredId = _currentId++;
             _hotkeyAction = action;
-            
+
             bool result = RegisterHotKey(_windowHandle, _registeredId, modifiers, key);
-            
+
             if (result)
             {
                 Log.Information($"Successfully registered hotkey: {hotKeyString} (ID: {_registeredId}, Modifiers: {modifiers}, Key: {key})");
@@ -85,7 +85,7 @@ namespace BlackoutScanner.Services
                 int error = Marshal.GetLastWin32Error();
                 Log.Error($"Failed to register hotkey: {hotKeyString}. Win32 Error: {error}");
             }
-            
+
             return result;
         }
 
@@ -107,11 +107,11 @@ namespace BlackoutScanner.Services
                 return false;
 
             var parts = hotKeyString.Split('+');
-            
+
             foreach (var part in parts)
             {
                 var trimmed = part.Trim();
-                
+
                 if (trimmed.Equals("Ctrl", StringComparison.OrdinalIgnoreCase))
                     modifiers |= 0x0002; // MOD_CONTROL
                 else if (trimmed.Equals("Alt", StringComparison.OrdinalIgnoreCase))

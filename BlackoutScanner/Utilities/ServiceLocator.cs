@@ -13,7 +13,7 @@ namespace BlackoutScanner.Utilities
     public static class ServiceLocator
     {
         private static IServiceProvider? _serviceProvider;
-        
+
         public static bool IsInitialized => _serviceProvider != null;
 
         public static void Configure()
@@ -52,7 +52,7 @@ namespace BlackoutScanner.Utilities
             // Register slow-initializing OCR-related services last
             services.AddSingleton<IOCRProcessor, OCRProcessor>();
             services.AddSingleton<IScanner, Scanner>();
-            
+
             Log.Information("Service Locator successfully configured all services");
 
             _serviceProvider = services.BuildServiceProvider();

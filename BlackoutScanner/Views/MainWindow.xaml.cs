@@ -31,15 +31,16 @@ namespace BlackoutScanner.Views
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
         private bool isScanning = false;
+        private bool wasScanningBeforeEdit = false; // Track if we were scanning before editing
+        private HashSet<string> fieldsBeingEdited = new HashSet<string>(); // Track which fields are being edited
+        private Dictionary<string, string> lastFieldValues = new Dictionary<string, string>(); // Track last values to prevent unnecessary updates
         private IScanner? scanner;
         private IDataManager? dataManager;
         private IOCRProcessor? ocrProcessor;
         private IGameProfileManager? _gameProfileManager;
         private ISettingsManager? _settingsManager;
         private IHotKeyManager? _hotKeyManager;
-        private bool _isCapturingHotKey = false;
-
-        public IGameProfileManager? GameProfileManager
+        private bool _isCapturingHotKey = false; public IGameProfileManager? GameProfileManager
         {
             get => _gameProfileManager;
             private set
@@ -412,7 +413,7 @@ namespace BlackoutScanner.Views
                 // Add ScanDate column
                 var scanDateColumn = new DataGridTextColumn
                 {
-                    Header = "Scan Date",
+                    Header = "Scan Date (UTC)",
                     Binding = new System.Windows.Data.Binding("ScanDate")
                     {
                         StringFormat = "{0:g}"
@@ -704,7 +705,7 @@ namespace BlackoutScanner.Views
                     textColumn.Width = DataGridLength.SizeToHeader;
 
                     // For the ScanDate column, set a fixed width
-                    if (textColumn.Header.ToString() == "Scan Date")
+                    if (textColumn.Header.ToString() == "Scan Date (UTC)")
                     {
                         textColumn.Width = new DataGridLength(150);
                         continue; // Skip further processing for this column
@@ -946,6 +947,11 @@ namespace BlackoutScanner.Views
                         VerticalAlignment = VerticalAlignment.Center
                     };
 
+                    // Add event handlers for edit tracking
+                    textBox.GotFocus += TextBox_GotFocus;
+                    textBox.LostFocus += TextBox_LostFocus;
+                    textBox.TextChanged += TextBox_TextChanged;
+
                     // Create the save button
                     var button = new Button
                     {
@@ -1179,12 +1185,31 @@ namespace BlackoutScanner.Views
                         } // Close the if (newHash != currentRecordHash) block
                     }
 
-                    // Update field text boxes with the new data
+                    // Update field text boxes with the new data - but skip fields being edited
                     foreach (var kvp in data)
                     {
+                        // Skip updating fields that are currently being edited
+                        if (fieldsBeingEdited.Contains(kvp.Key))
+                        {
+                            Log.Debug($"Skipping update for field '{kvp.Key}' - currently being edited");
+                            continue;
+                        }
+
                         if (fieldTextBoxes.TryGetValue(kvp.Key, out var textBox))
                         {
-                            textBox.Text = kvp.Value?.ToString() ?? string.Empty;
+                            var newValue = kvp.Value?.ToString() ?? string.Empty;
+
+                            // Only update if the value has actually changed
+                            if (!lastFieldValues.TryGetValue(kvp.Key, out var lastValue) || lastValue != newValue)
+                            {
+                                textBox.Text = newValue;
+                                lastFieldValues[kvp.Key] = newValue;
+                                Log.Debug($"Updated field '{kvp.Key}' with new value: {newValue}");
+                            }
+                            else
+                            {
+                                Log.Debug($"Skipping update for field '{kvp.Key}' - value unchanged");
+                            }
                         }
                     }
 
@@ -1221,8 +1246,78 @@ namespace BlackoutScanner.Views
         }
 
 
+        private void TextBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBox textBox)
+            {
+                // Find the field name from our dictionary
+                var fieldName = fieldTextBoxes.FirstOrDefault(x => x.Value == textBox).Key;
+                if (!string.IsNullOrEmpty(fieldName))
+                {
+                    fieldsBeingEdited.Add(fieldName);
+
+                    // If we're currently scanning, pause it
+                    if (isScanning && scanner != null)
+                    {
+                        wasScanningBeforeEdit = true;
+                        isScanning = false;  // Important: Set this to false AFTER setting wasScanningBeforeEdit
+                        scanner.StopScanning();
+                        Log.Information($"Paused scanning for editing field: {fieldName}. wasScanningBeforeEdit set to true.");
+
+                        // Update UI to show paused state
+                        if (FindName("scanButton") is Button scanButton)
+                        {
+                            scanButton.Content = "Paused (Editing)";
+                        }
+                    }
+                    else
+                    {
+                        wasScanningBeforeEdit = false;
+                        Log.Debug($"Not pausing scan (not currently scanning). isScanning={isScanning}");
+                    }
+                }
+            }
+        }
+
+        private void TextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBox textBox)
+            {
+                // Find the field name from our dictionary
+                var fieldName = fieldTextBoxes.FirstOrDefault(x => x.Value == textBox).Key;
+                if (!string.IsNullOrEmpty(fieldName))
+                {
+                    fieldsBeingEdited.Remove(fieldName);
+
+                    // If no fields are being edited and we should resume scanning
+                    if (fieldsBeingEdited.Count == 0 && wasScanningBeforeEdit && !isScanning)
+                    {
+                        // Don't auto-resume here - wait for Save button click
+                        // This gives user time to review their changes
+                    }
+                }
+            }
+        }
+
+        private void TextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (sender is TextBox textBox)
+            {
+                // Mark that user has made manual changes
+                var fieldName = fieldTextBoxes.FirstOrDefault(x => x.Value == textBox).Key;
+                if (!string.IsNullOrEmpty(fieldName))
+                {
+                    // Store the manually edited value
+                    lastFieldValues[fieldName] = textBox.Text;
+                }
+            }
+        }
+
         private void ScanButton_Click(object sender, RoutedEventArgs e)
         {
+            // Reset the edit tracking when manually starting/stopping
+            wasScanningBeforeEdit = false;
+
             // If OCR is not initialized yet, show a message
             if (scanner == null || ocrProcessor == null)
             {
@@ -1230,7 +1325,6 @@ namespace BlackoutScanner.Views
                                 "OCR Not Ready", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             if (isScanning)
             {
                 // Stop scanning
@@ -1302,10 +1396,12 @@ namespace BlackoutScanner.Views
                     if (ocrProcessor != null)
                     {
                         var imageHash = ocrProcessor.GenerateImageHash(bitmapImage);
-
                         ocrProcessor.UpdateCacheResult(imageHash, correctedText);
                         Log.Information($"Saved corrected value for '{fieldName}': '{correctedText}' with image hash '{imageHash}' to OCR cache.");
                     }
+
+                    // Update the last known value
+                    lastFieldValues[fieldName] = correctedText;
 
                     // Now, update the data in memory
                     if (!string.IsNullOrEmpty(currentRecordHash) && dataManager?.DataRecordDictionary.TryGetValue(currentRecordHash, out var recordToUpdate) == true)
@@ -1313,10 +1409,32 @@ namespace BlackoutScanner.Views
                         recordToUpdate.Fields[fieldName] = correctedText;
                         Log.Information($"Updated '{fieldName}' for record with hash '{currentRecordHash}' in memory.");
                     }
+
+                    // Clear the field from being edited set
+                    fieldsBeingEdited.Remove(fieldName);
+
+                    // Resume scanning if it was paused for editing
+                    if (wasScanningBeforeEdit && !isScanning && GameProfileManager?.ActiveProfile != null && scanner != null)
+                    {
+                        Log.Information($"Resuming scanning after save. wasScanningBeforeEdit={wasScanningBeforeEdit}, isScanning={isScanning}");
+                        scanner.StartScanning(GameProfileManager.ActiveProfile);
+                        isScanning = true;
+                        wasScanningBeforeEdit = false;
+
+                        if (FindName("scanButton") is Button scanButton)
+                        {
+                            scanButton.Content = "Stop Scanning";
+                        }
+
+                        Log.Information("Resumed scanning after saving field correction.");
+                    }
+                    else
+                    {
+                        Log.Debug($"Not resuming scan. wasScanningBeforeEdit={wasScanningBeforeEdit}, isScanning={isScanning}");
+                    }
                 }
             }
         }
-
         private void UpdateScanDate(DateTime scanDate)
         {
             Dispatcher.Invoke(() =>
@@ -1892,18 +2010,18 @@ namespace BlackoutScanner.Views
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             Log.Debug("MainWindow_Loaded event triggered");
-            
+
             // Delay the hotkey initialization to ensure everything is ready
-            this.Dispatcher.BeginInvoke(new Action(() => 
+            this.Dispatcher.BeginInvoke(new Action(() =>
             {
                 InitializeHotKey();
             }), System.Windows.Threading.DispatcherPriority.Background);
         }
-        
+
         private void InitializeHotKey()
         {
             Log.Debug("InitializeHotKey called");
-            
+
             // If hotkey manager isn't available yet, try to get it from the service locator
             if (_hotKeyManager == null)
             {
@@ -1924,14 +2042,14 @@ namespace BlackoutScanner.Views
                 {
                     Log.Debug("ServiceLocator not initialized yet, scheduling retry");
                     // Retry after a short delay
-                    this.Dispatcher.BeginInvoke(new Action(() => 
+                    this.Dispatcher.BeginInvoke(new Action(() =>
                     {
                         InitializeHotKey();
                     }), System.Windows.Threading.DispatcherPriority.Background);
                     return;
                 }
             }
-            
+
             if (_hotKeyManager != null)
             {
                 Log.Debug("Initializing HotKeyManager with window handle");
@@ -1939,7 +2057,7 @@ namespace BlackoutScanner.Views
 
                 // Load and register the saved hotkey
                 string hotKey = "Ctrl+Q"; // Default
-                
+
                 if (SettingsManager != null)
                 {
                     hotKey = SettingsManager.Settings.HotKey;
@@ -1949,14 +2067,14 @@ namespace BlackoutScanner.Views
                 {
                     Log.Debug("SettingsManager not available, using default hotkey");
                 }
-                
+
                 // Update the UI
                 if (this.FindName("HotKeyTextBox") is TextBox hotKeyTextBox)
                 {
                     hotKeyTextBox.Text = hotKey;
                     Log.Debug($"Updated HotKeyTextBox with: {hotKey}");
                 }
-                
+
                 // Register the hotkey
                 RegisterHotKey(hotKey);
             }
@@ -1973,9 +2091,9 @@ namespace BlackoutScanner.Views
                 Log.Warning("Cannot register hotkey: HotKeyManager is not available");
                 return;
             }
-            
+
             Log.Debug($"Attempting to register hotkey: {hotKeyString}");
-            
+
             if (string.IsNullOrWhiteSpace(hotKeyString))
             {
                 Log.Warning("Hotkey string is empty or null, cannot register");
@@ -1985,7 +2103,7 @@ namespace BlackoutScanner.Views
             if (_hotKeyManager.RegisterHotKey(hotKeyString, () =>
             {
                 Log.Debug($"Hotkey {hotKeyString} triggered!");
-                
+
                 Dispatcher.Invoke(() =>
                 {
                     // Toggle scanning
@@ -2014,7 +2132,7 @@ namespace BlackoutScanner.Views
             }
             else
             {
-                MessageBox.Show($"Failed to register hotkey: {hotKeyString}\n\nThis might happen if another application is using this hotkey combination.", 
+                MessageBox.Show($"Failed to register hotkey: {hotKeyString}\n\nThis might happen if another application is using this hotkey combination.",
                               "Hotkey Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 Log.Warning($"Failed to register hotkey: {hotKeyString}");
             }
@@ -2100,7 +2218,7 @@ namespace BlackoutScanner.Views
             {
                 hotKeyTextBox.Text = defaultHotKey;
             }
-            
+
             // If hotkey manager is not available, try to initialize it first
             if (_hotKeyManager == null)
             {
@@ -2110,6 +2228,20 @@ namespace BlackoutScanner.Views
             else
             {
                 RegisterHotKey(defaultHotKey);
+            }
+        }
+
+        // Handle the local time in exports checkbox
+        private void UseLocalTimeCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox checkBox && SettingsManager != null)
+            {
+                SettingsManager.Settings.UseLocalTimeInExports = checkBox.IsChecked ?? false;
+                SettingsManager.SaveSettings(); // Auto-save
+
+                Log.Information($"Use local time in exports set to: {SettingsManager.Settings.UseLocalTimeInExports}");
+
+                // No need to refresh UI since this only affects exports
             }
         }
         // OnClosed is already implemented in the class
