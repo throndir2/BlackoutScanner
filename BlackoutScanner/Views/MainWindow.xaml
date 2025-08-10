@@ -230,24 +230,30 @@
                                                                           Click="DebugSettings_Changed"/>
 
                                                                 <!-- Log Level Setting -->
-                                                                <StackPanel Grid.Row="1" 
-                                                                          Grid.Column="0"
-                                                                          Grid.ColumnSpan="3"
-                                                                          Orientation="Horizontal" 
-                                                                          Margin="0,5">
-                                                                    <TextBlock Text="Log Level:" 
-                                                                               VerticalAlignment="Center"
-                                                                               Margin="0,0,10,0"/>
-                                                                    <ComboBox x:Name="logLevelComboBox" 
-                                                                              Width="150"
-                                                                              SelectionChanged="LogLevelComboBox_SelectionChanged">
-                                                                        <ComboBoxItem Content="Verbose" Tag="Verbose"/>
-                                                                        <ComboBoxItem Content="Debug" Tag="Debug"/>
-                                                                        <ComboBoxItem Content="Information" Tag="Information"/>
-                                                                        <ComboBoxItem Content="Warning" Tag="Warning"/>
-                                                                        <ComboBoxItem Content="Error" Tag="Error"/>
-                                                                        <ComboBoxItem Content="Fatal" Tag="Fatal"/>
-                                                                    </ComboBox>
+                                                                <StackPanel Grid.Row="1"
+                                                                            Grid.Column="0"
+                                                                            Grid.ColumnSpan="3"
+                                                                            Orientation="Horizontal"
+                                                                            Margin="0,5">
+                                                                        <TextBlock Text="Log Level:"
+                                                                                   VerticalAlignment="Center"
+                                                                                   Margin="0,0,10,0"/>
+                                                                        <ComboBox x:Name="logLevelComboBox"
+                                                                                  Width="150"
+                                                                                  SelectionChanged="LogLevelComboBox_SelectionChanged">
+                                                                                <ComboBoxItem Content="Verbose"
+                                                                                                Tag="Verbose"/>
+                                                                                <ComboBoxItem Content="Debug"
+                                                                                                Tag="Debug"/>
+                                                                                <ComboBoxItem Content="Information"
+                                                                                                Tag="Information"/>
+                                                                                <ComboBoxItem Content="Warning"
+                                                                                                Tag="Warning"/>
+                                                                                <ComboBoxItem Content="Error"
+                                                                                                Tag="Error"/>
+                                                                                <ComboBoxItem Content="Fatal"
+                                                                                                Tag="Fatal"/>
+                                                                        </ComboBox>
                                                                 </StackPanel>
 
                                                                 <!-- Debug Images Folder -->

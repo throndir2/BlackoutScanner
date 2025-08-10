@@ -79,13 +79,13 @@ namespace BlackoutScanner.Services
             {
                 Log.Error(ex, "[SettingsManager.LoadSettings] Failed to load settings, using defaults");
                 _settings = new AppSettings();
-                
+
                 // Apply default log level
                 if (Enum.TryParse<LogEventLevel>(_settings.LogLevel, out var logLevel))
                 {
                     UISink.MinimumLevel = logLevel;
                 }
-                
+
                 Log.Information($"[SettingsManager.LoadSettings] Created new default settings: SaveDebugImages={_settings.SaveDebugImages}, LogLevel={_settings.LogLevel}");
             }
         }

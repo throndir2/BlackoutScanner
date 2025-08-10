@@ -28,7 +28,7 @@ namespace BlackoutScanner.Infrastructure
             // Only emit if the log level meets the minimum threshold
             if (logEvent.Level < _minimumLevel)
                 return;
-                
+
             var renderSpace = new System.IO.StringWriter();
             _formatter.Format(logEvent, renderSpace);
             var message = renderSpace.ToString().TrimEnd('\r', '\n');

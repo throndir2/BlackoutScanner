@@ -83,7 +83,7 @@ namespace BlackoutScanner.Views
 
         // Throttling for UI updates to prevent excessive operations
         private System.Windows.Threading.DispatcherTimer autoSizeTimer;
-        
+
         // Method to handle log level selection changes
         private void LogLevelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -91,18 +91,18 @@ namespace BlackoutScanner.Views
             {
                 var selectedLevel = selectedItem.Tag?.ToString() ?? "Information";
                 Log.Information($"Log level changed to: {selectedLevel}");
-                
+
                 if (SettingsManager != null)
                 {
                     SettingsManager.Settings.LogLevel = selectedLevel;
-                    
+
                     // Apply log level immediately
                     if (Enum.TryParse<LogEventLevel>(selectedLevel, out var logEventLevel))
                     {
                         UISink.MinimumLevel = logEventLevel;
                         Log.Information($"UI log level set to: {logEventLevel}");
                     }
-                    
+
                     // Save settings to persist the change
                     SettingsManager.SaveSettings();
                 }
@@ -121,7 +121,7 @@ namespace BlackoutScanner.Views
         {
             InitializeComponent();
             DataContext = this;
-            
+
             // Set the window title with version information
             var version = Utilities.VersionInfo.GetProductVersion();
             this.Title = $"Blackout Scanner v{version}";
@@ -269,7 +269,7 @@ namespace BlackoutScanner.Views
                             logLevel = SettingsManager.Settings.LogLevel;
                             Log.Information($"[InitializeAppComponents] After re-sync: saveDebugImages={saveDebugImages}, logLevel={logLevel}");
                         }
-                        
+
                         // Convert log level to verbose boolean for scanner
                         bool isVerbose = logLevel == "Verbose" || logLevel == "Debug";
                         scanner.UpdateDebugSettings(saveDebugImages, isVerbose, debugImagesFolder);
@@ -1382,7 +1382,7 @@ namespace BlackoutScanner.Views
                         if (logLevelCombo != null)
                         {
                             logLevelCombo.SelectionChanged -= LogLevelComboBox_SelectionChanged;
-                            
+
                             // Find and select the matching item
                             foreach (ComboBoxItem item in logLevelCombo.Items)
                             {
@@ -1392,7 +1392,7 @@ namespace BlackoutScanner.Views
                                     break;
                                 }
                             }
-                            
+
                             logLevelCombo.SelectionChanged += LogLevelComboBox_SelectionChanged;
                             Log.Information($"[LoadDebugSettingsFromManager] Updated logLevelComboBox selection to {logLevel}");
                         }
@@ -1423,7 +1423,7 @@ namespace BlackoutScanner.Views
                 {
                     // We'll convert 'false' for verbose to match the new log level system
                     bool isVerbose = logLevel == "Verbose" || logLevel == "Debug";
-                    
+
                     Log.Information($"[LoadDebugSettingsFromManager] Updating scanner debug settings: saveDebugImages={saveDebugImages}, isVerbose={isVerbose}");
                     scanner.UpdateDebugSettings(saveDebugImages, isVerbose, debugImagesFolder);
                 }
@@ -1478,7 +1478,7 @@ namespace BlackoutScanner.Views
                 {
                     // Convert log level to verbose boolean for scanner
                     bool isVerbose = logLevel == "Verbose" || logLevel == "Debug";
-                    
+
                     Log.Information($"[SaveDebugSettings] Updating scanner debug settings: saveDebugImages={saveDebugImages}, isVerbose={isVerbose}");
                     scanner.UpdateDebugSettings(saveDebugImages, isVerbose, debugImagesFolder);
                 }
@@ -1525,9 +1525,9 @@ namespace BlackoutScanner.Views
                         if (scanner != null)
                         {
                             // Convert log level to verbose boolean for scanner
-                            bool isVerbose = SettingsManager.Settings.LogLevel == "Verbose" || 
+                            bool isVerbose = SettingsManager.Settings.LogLevel == "Verbose" ||
                                            SettingsManager.Settings.LogLevel == "Debug";
-                                           
+
                             scanner.UpdateDebugSettings(
                                 SettingsManager.Settings.SaveDebugImages,
                                 isVerbose,

@@ -17,12 +17,12 @@ namespace BlackoutScanner
             // Configure Serilog with UI sink BEFORE ServiceLocator
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Verbose() // Log everything to file
-                .WriteTo.File("logs/blackoutscanner-.log", 
+                .WriteTo.File("logs/blackoutscanner-.log",
                     rollingInterval: RollingInterval.Day,
                     restrictedToMinimumLevel: LogEventLevel.Verbose) // Everything to file
                 .WriteTo.UI() // UI sink will filter based on UISink.MinimumLevel
                 .CreateLogger();
-            
+
             // Set default UI log level
             UISink.MinimumLevel = LogEventLevel.Information;
 
