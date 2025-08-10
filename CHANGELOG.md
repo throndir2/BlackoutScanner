@@ -1,14 +1,6 @@
 ```markdown
 # Blackout Scanner Changelog
 
-## [2.0.4] - 2025-08-10
-
-### Added
-- Option to use local time in exports instead of UTC
-- Local time setting is available in the Export Settings section
-- Time format metadata included in JSON exports
-- Improved date formatting in exports for better readability
-
 ## [2.0.3] - 2025-08-10
 
 ### Added
@@ -16,6 +8,7 @@
 - Hotkey configuration UI in the Configuration tab
 - Scanning automatically pauses when editing a field in the Scan tab
 - Scanning resumes when Save button is clicked after editing
+- Option to use local time in exports instead of UTC
 
 ## [2.0.2] - 2025-08-09
 
