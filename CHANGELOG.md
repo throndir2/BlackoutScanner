@@ -15,9 +15,19 @@
   - "Enhanced Accuracy" mode - uses multiple language engines for better OCR results at cost of speed
 - Configurable OCR confidence threshold via slider control
 - Button to reinitialize OCR engines after changing settings
+- Added comprehensive debug logging for troubleshooting data update issues
 
 ### Fixed
 - Data tab only showing the first scanned record and not updating with subsequent records
+- Manual field edits in the Scan tab not properly reflected in the Data tab or in exports
+- Key field updates causing potential data loss when editing in the Scan tab
+- Added protection against duplicate records when updating key fields
+- Fixed bug where editing non-key fields created duplicate entries in the Data tab
+- Fixed issue where manually saving fields failed after editing with "No currentRecordHash" warning
+- Fixed critical bug where category information wasn't being correctly passed from the Scanner to UI
+- Improved handling of image-based category detection to properly maintain record history
+- Enhanced robustness of record tracking when switching between categories
+- Improved UI synchronization between Scan tab and Data tab
 
 ## [2.0.3] - 2025-08-10
 
@@ -46,5 +56,5 @@
 - UI improvements in configuration menu
 
 ### Known Issues
-- Editing key fields results in duplicates data entries
+- None currently identified
 ```

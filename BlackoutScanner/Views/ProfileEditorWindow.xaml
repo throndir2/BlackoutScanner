@@ -7,8 +7,8 @@
         xmlns:converters="clr-namespace:BlackoutScanner.Converters"
         mc:Ignorable="d"
         Title="Game Profile Editor"
-        Height="700"
-        Width="900"
+        Height="850"
+        Width="1100"
         Background="{DynamicResource BackgroundBrush}">
     <Window.Resources>
         <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
@@ -156,26 +156,26 @@
                                     </Grid.RowDefinitions>
 
                                     <TextBlock Grid.Row="0"
-                                            Grid.Column="0"
+                                               Grid.Column="0"
                                                Text="Row Height Offset:"
                                                VerticalAlignment="Center"/>
                                     <TextBox Grid.Row="0"
-                                            Grid.Column="1"
+                                             Grid.Column="1"
                                              Name="txtEntityHeightOffset"
                                              Text="{Binding EntityHeightOffset}"
                                              ToolTip="Vertical distance in pixels between each row"/>
                                     <TextBlock Grid.Row="0"
-                                            Grid.Column="2"
+                                               Grid.Column="2"
                                                Text="pixels"
                                                Margin="5,0,0,0"
                                                VerticalAlignment="Center"/>
 
                                     <TextBlock Grid.Row="1"
-                                            Grid.Column="0"
+                                               Grid.Column="0"
                                                Text="Max Rows to Capture:"
                                                VerticalAlignment="Center"/>
                                     <TextBox Grid.Row="1"
-                                            Grid.Column="1"
+                                             Grid.Column="1"
                                              Name="txtMaxEntityCount"
                                              Text="{Binding MaxEntityCount}"
                                              ToolTip="Maximum number of rows to scan (1-50)"/>

@@ -449,14 +449,43 @@ namespace BlackoutScanner
                 string newHash = GenerateDataHash(updatedRecord, profile);
                 if (!string.IsNullOrEmpty(newHash) && !newHash.All(c => c == '-'))
                 {
-                    DataRecordDictionary.Remove(oldHash);
-                    DataRecordDictionary[newHash] = updatedRecord;
+                    // Check if the new hash already exists to avoid duplicates
+                    if (newHash != oldHash && DataRecordDictionary.ContainsKey(newHash))
+                    {
+                        // Merge fields from both records if needed
+                        var existingRecord = DataRecordDictionary[newHash];
+                        foreach (var field in updatedRecord.Fields)
+                        {
+                            existingRecord.Fields[field.Key] = field.Value;
+                        }
+
+                        // Use the most recent scan date
+                        if (updatedRecord.ScanDate > existingRecord.ScanDate)
+                        {
+                            existingRecord.ScanDate = updatedRecord.ScanDate;
+                        }
+
+                        // Remove the old record
+                        DataRecordDictionary.Remove(oldHash);
+                        Log.Information($"Merged record with hash '{oldHash}' into existing record with hash '{newHash}'");
+                    }
+                    else
+                    {
+                        // Standard case: remove old and add new
+                        DataRecordDictionary.Remove(oldHash);
+                        DataRecordDictionary[newHash] = updatedRecord;
+                        Log.Information($"Updated record key from '{oldHash}' to '{newHash}'");
+                    }
                     hasUnsavedChanges = true;
                 }
                 else
                 {
                     Log.Warning("Could not generate a valid new hash for the updated record. Record not updated.");
                 }
+            }
+            else
+            {
+                Log.Warning($"Could not find record with hash '{oldHash}' to update key.");
             }
         }
 

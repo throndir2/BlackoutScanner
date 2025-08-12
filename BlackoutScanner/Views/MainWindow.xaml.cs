@@ -1048,6 +1048,8 @@ namespace BlackoutScanner.Views
             {
                 try
                 {
+                    Log.Debug($"[HandleDataUpdated] START - currentRecordHash before update: {currentRecordHash ?? "null"}");
+
                     // Show update indicator
                     if (FindName("dataUpdateIndicator") is TextBlock dataUpdateIndicator)
                     {
@@ -1058,30 +1060,58 @@ namespace BlackoutScanner.Views
 
                     if (GameProfileManager?.ActiveProfile != null && dataManager != null)
                     {
+                        // Extract the category from the special key if present
+                        string? detectedCategory = null;
+                        if (data.TryGetValue("__Category__", out var categoryObj) && categoryObj is string categoryName)
+                        {
+                            detectedCategory = categoryName;
+                            // Remove the special key so it doesn't get stored as a field
+                            data.Remove("__Category__");
+                            Log.Debug($"[HandleDataUpdated] Extracted category '{detectedCategory}' from data");
+                        }
+
                         // Create temporary DataRecord to get category info
                         var tempRecord = new DataRecord
                         {
                             Fields = new Dictionary<string, object>(data),
                             ScanDate = DateTime.UtcNow,
-                            GameProfile = GameProfileManager.ActiveProfile.ProfileName
+                            GameProfile = GameProfileManager.ActiveProfile.ProfileName,
+                            Category = detectedCategory ?? string.Empty // Use the detected category
                         };
+
+                        // If category wasn't provided or is empty, try to detect it from fields (fallback)
+                        if (string.IsNullOrEmpty(detectedCategory))
+                        {
+                            Log.Warning($"[HandleDataUpdated] No category provided in data, attempting to detect from fields");
+                            foreach (var category in GameProfileManager.ActiveProfile.Categories)
+                            {
+                                // Check if all fields from this category are present in the data
+                                bool allFieldsMatch = category.Fields.All(field =>
+                                    data.ContainsKey(field.Name));
+
+                                if (allFieldsMatch && category.Fields.Count > 0)
+                                {
+                                    detectedCategory = category.Name;
+                                    tempRecord.Category = detectedCategory;
+                                    Log.Debug($"[HandleDataUpdated] Detected category '{detectedCategory}' from fields");
+                                    break;
+                                }
+                            }
+                        }
 
                         // Generate hash for the new data
                         var newHash = dataManager.GenerateDataHash(tempRecord, GameProfileManager.ActiveProfile);
 
-                        // Find which category this data belongs to by checking the visible fields
-                        string? detectedCategory = null;
-                        foreach (var category in GameProfileManager.ActiveProfile.Categories)
-                        {
-                            // Check if all fields from this category are present in the data
-                            bool allFieldsMatch = category.Fields.All(field =>
-                                data.ContainsKey(field.Name));
+                        // IMPORTANT: Always update currentRecordHash, even when fields are being edited
+                        // This ensures SaveField_Click has the correct hash to work with
+                        var previousHash = currentRecordHash;
+                        currentRecordHash = newHash;
+                        Log.Information($"[HandleDataUpdated] Updated currentRecordHash from '{previousHash ?? "null"}' to '{newHash}'");
 
-                            if (allFieldsMatch && category.Fields.Count > 0)
-                            {
-                                detectedCategory = category.Name;
-                                break;
-                            }
+                        // Log if we have fields being edited
+                        if (fieldsBeingEdited.Count > 0)
+                        {
+                            Log.Debug($"[HandleDataUpdated] Fields currently being edited: {string.Join(", ", fieldsBeingEdited)}");
                         }
 
                         if (!string.IsNullOrEmpty(detectedCategory))
@@ -1178,8 +1208,7 @@ namespace BlackoutScanner.Views
                             }
                         }
 
-                        // Update currentRecordHash for the scan tab field tracking
-                        currentRecordHash = newHash;
+                        // currentRecordHash is already set at the beginning of this method
                     }
 
                     // Update field text boxes with the new data - but skip fields being edited
@@ -1223,10 +1252,14 @@ namespace BlackoutScanner.Views
                         timer.Stop();
                     };
                     timer.Start();
+
+                    // Log final state of currentRecordHash at end of method
+                    Log.Debug($"[HandleDataUpdated] END - currentRecordHash final value: {currentRecordHash ?? "null"}");
                 }
                 catch (Exception ex)
                 {
                     Log.Error(ex, "Error updating data in UI");
+                    Log.Debug($"[HandleDataUpdated] ERROR - currentRecordHash at error: {currentRecordHash ?? "null"}");
 
                     // Update indicator to show error
                     if (FindName("dataUpdateIndicator") is TextBlock errorIndicator)
@@ -1258,7 +1291,9 @@ namespace BlackoutScanner.Views
                 var fieldName = fieldTextBoxes.FirstOrDefault(x => x.Value == textBox).Key;
                 if (!string.IsNullOrEmpty(fieldName))
                 {
+                    Log.Debug($"[TextBox_GotFocus] Field '{fieldName}' got focus. Current recordHash: {currentRecordHash ?? "null"}");
                     fieldsBeingEdited.Add(fieldName);
+                    Log.Debug($"[TextBox_GotFocus] Added '{fieldName}' to fieldsBeingEdited. Count: {fieldsBeingEdited.Count}");
 
                     // If we're currently scanning, pause it
                     if (isScanning && scanner != null)
@@ -1266,7 +1301,7 @@ namespace BlackoutScanner.Views
                         wasScanningBeforeEdit = true;
                         isScanning = false;  // Important: Set this to false AFTER setting wasScanningBeforeEdit
                         scanner.StopScanning();
-                        Log.Information($"Paused scanning for editing field: {fieldName}. wasScanningBeforeEdit set to true.");
+                        Log.Information($"[TextBox_GotFocus] Paused scanning for editing field: {fieldName}. wasScanningBeforeEdit={wasScanningBeforeEdit}");
 
                         // Update UI to show paused state
                         if (FindName("scanButton") is Button scanButton)
@@ -1277,8 +1312,12 @@ namespace BlackoutScanner.Views
                     else
                     {
                         wasScanningBeforeEdit = false;
-                        Log.Debug($"Not pausing scan (not currently scanning). isScanning={isScanning}");
+                        Log.Debug($"[TextBox_GotFocus] Not pausing scan (not currently scanning). isScanning={isScanning}, wasScanningBeforeEdit={wasScanningBeforeEdit}");
                     }
+                }
+                else
+                {
+                    Log.Warning("[TextBox_GotFocus] TextBox got focus but couldn't find associated field name");
                 }
             }
         }
@@ -1291,14 +1330,24 @@ namespace BlackoutScanner.Views
                 var fieldName = fieldTextBoxes.FirstOrDefault(x => x.Value == textBox).Key;
                 if (!string.IsNullOrEmpty(fieldName))
                 {
+                    Log.Debug($"[TextBox_LostFocus] Field '{fieldName}' lost focus. Current recordHash: {currentRecordHash ?? "null"}");
+
+                    bool wasInEditSet = fieldsBeingEdited.Contains(fieldName);
                     fieldsBeingEdited.Remove(fieldName);
+
+                    Log.Debug($"[TextBox_LostFocus] Removed '{fieldName}' from fieldsBeingEdited (was in set: {wasInEditSet}). Count now: {fieldsBeingEdited.Count}");
 
                     // If no fields are being edited and we should resume scanning
                     if (fieldsBeingEdited.Count == 0 && wasScanningBeforeEdit && !isScanning)
                     {
+                        Log.Debug($"[TextBox_LostFocus] Could auto-resume scanning, but waiting for Save button click. wasScanningBeforeEdit={wasScanningBeforeEdit}, isScanning={isScanning}");
                         // Don't auto-resume here - wait for Save button click
                         // This gives user time to review their changes
                     }
+                }
+                else
+                {
+                    Log.Warning("[TextBox_LostFocus] TextBox lost focus but couldn't find associated field name");
                 }
             }
         }
@@ -1392,35 +1441,210 @@ namespace BlackoutScanner.Views
 
         private void SaveField_Click(object sender, RoutedEventArgs e)
         {
+            Log.Debug($"[SaveField_Click] START - currentRecordHash: {currentRecordHash ?? "null"}, fieldsBeingEdited.Count: {fieldsBeingEdited.Count}");
+
             if (sender is Button button && button.Tag is string fieldName)
             {
-                if (fieldImages.TryGetValue(fieldName, out var imageControl) && imageControl.Source is BitmapImage bitmapImage)
+                Log.Debug($"[SaveField_Click] Processing save for field: '{fieldName}'");
+
+                if (fieldTextBoxes.TryGetValue(fieldName, out var textBox) &&
+                    fieldImages.TryGetValue(fieldName, out var imageControl) &&
+                    imageControl.Source is BitmapImage bitmapImage)
                 {
-                    var correctedText = fieldTextBoxes[fieldName].Text;
+                    string correctedText = textBox.Text;
+                    string imageHash = string.Empty;
+
+                    // Update the OCR cache
                     if (ocrProcessor != null)
                     {
-                        var imageHash = ocrProcessor.GenerateImageHash(bitmapImage);
+                        imageHash = ocrProcessor.GenerateImageHash(bitmapImage);
                         ocrProcessor.UpdateCacheResult(imageHash, correctedText);
-                        Log.Information($"Saved corrected value for '{fieldName}': '{correctedText}' with image hash '{imageHash}' to OCR cache.");
+                        Log.Information($"[SaveField_Click] Saved corrected value for '{fieldName}': '{correctedText}' with image hash '{imageHash}' to OCR cache.");
                     }
 
                     // Update the last known value
                     lastFieldValues[fieldName] = correctedText;
+                    Log.Debug($"[SaveField_Click] Updated lastFieldValues['{fieldName}'] = '{correctedText}'");
 
-                    // Now, update the data in memory
-                    if (!string.IsNullOrEmpty(currentRecordHash) && dataManager?.DataRecordDictionary.TryGetValue(currentRecordHash, out var recordToUpdate) == true)
+                    // Check if we have the active profile and data manager
+                    if (GameProfileManager?.ActiveProfile != null && dataManager != null)
                     {
-                        recordToUpdate.Fields[fieldName] = correctedText;
-                        Log.Information($"Updated '{fieldName}' for record with hash '{currentRecordHash}' in memory.");
+                        Log.Debug($"[SaveField_Click] Active profile: {GameProfileManager.ActiveProfile.ProfileName}, DataManager available");
+
+                        // Build current field values from UI
+                        var currentFieldValues = new Dictionary<string, object>();
+                        foreach (var kvp in fieldTextBoxes)
+                        {
+                            currentFieldValues[kvp.Key] = kvp.Value.Text;
+                        }
+                        Log.Debug($"[SaveField_Click] Built currentFieldValues dictionary with {currentFieldValues.Count} fields");
+
+                        // Find the category for this field
+                        var category = GameProfileManager.ActiveProfile.Categories
+                            .FirstOrDefault(c => c.Fields.Any(f => f.Name == fieldName));
+
+                        if (category != null)
+                        {
+                            Log.Debug($"[SaveField_Click] Field '{fieldName}' belongs to category '{category.Name}'");
+
+                            // Check if this field is a key field
+                            var field = category.Fields.FirstOrDefault(f => f.Name == fieldName);
+                            bool isKeyField = field?.IsKeyField ?? false;
+                            Log.Debug($"[SaveField_Click] Field '{fieldName}' isKeyField={isKeyField}");
+
+                            if (!string.IsNullOrEmpty(currentRecordHash))
+                            {
+                                Log.Debug($"[SaveField_Click] Attempting to get existing record with hash: '{currentRecordHash}'");
+
+                                // Try to get the existing record
+                                if (dataManager.DataRecordDictionary.TryGetValue(currentRecordHash, out var existingRecord))
+                                {
+                                    Log.Debug($"[SaveField_Click] Found existing record with hash '{currentRecordHash}'");
+                                    Log.Debug($"[SaveField_Click] Record details: Category='{existingRecord.Category}', Fields={existingRecord.Fields.Count}, GameProfile='{existingRecord.GameProfile}'");
+
+                                    if (isKeyField)
+                                    {
+                                        Log.Information($"[SaveField_Click] Handling key field update for '{fieldName}'");
+
+                                        // Key field changed - need to update the hash
+                                        var updatedRecord = new DataRecord
+                                        {
+                                            Fields = new Dictionary<string, object>(currentFieldValues),
+                                            ScanDate = DateTime.UtcNow,
+                                            Category = existingRecord.Category,
+                                            GameProfile = existingRecord.GameProfile,
+                                            EntityIndex = existingRecord.EntityIndex,
+                                            GroupId = existingRecord.GroupId
+                                        };
+                                        Log.Debug($"[SaveField_Click] Created updated record with {updatedRecord.Fields.Count} fields");
+
+                                        // Remove old record and add with new hash
+                                        Log.Debug($"[SaveField_Click] Calling UpdateRecordKey with oldHash='{currentRecordHash}'");
+                                        string oldHash = currentRecordHash;
+                                        dataManager.UpdateRecordKey(currentRecordHash, updatedRecord, GameProfileManager.ActiveProfile);
+
+                                        // Update the ObservableCollection for the Data tab
+                                        if (categoryCollections.TryGetValue(category.Name, out var collection))
+                                        {
+                                            Log.Debug($"[SaveField_Click] Found collection for category '{category.Name}' with {collection.Count} items");
+
+                                            // Find and remove the old record from the collection
+                                            var oldRecord = collection.FirstOrDefault(r =>
+                                                dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == oldHash);
+
+                                            if (oldRecord != null)
+                                            {
+                                                Log.Debug($"[SaveField_Click] Found old record in collection. Removing it.");
+                                                collection.Remove(oldRecord);
+                                            }
+                                            else
+                                            {
+                                                Log.Warning($"[SaveField_Click] Could not find old record with hash '{oldHash}' in collection");
+                                            }
+
+                                            // Add the updated record
+                                            Log.Debug($"[SaveField_Click] Adding updated record to collection");
+                                            collection.Add(updatedRecord);
+                                            Log.Debug($"[SaveField_Click] Collection now has {collection.Count} items");
+                                        }
+                                        else
+                                        {
+                                            Log.Warning($"[SaveField_Click] Could not find collection for category '{category.Name}'");
+                                        }
+
+                                        // Update currentRecordHash to the new hash
+                                        string newHash = dataManager.GenerateDataHash(updatedRecord, GameProfileManager.ActiveProfile);
+                                        Log.Debug($"[SaveField_Click] New hash generated: '{newHash}'");
+
+                                        currentRecordHash = newHash;
+                                        Log.Information($"[SaveField_Click] Record hash updated from '{oldHash}' to '{currentRecordHash}'");
+                                    }
+                                    else
+                                    {
+                                        // Non-key field - just update the value in place
+                                        Log.Debug($"[SaveField_Click] Updating non-key field '{fieldName}' from '{existingRecord.Fields.GetValueOrDefault(fieldName)}' to '{correctedText}'");
+                                        existingRecord.Fields[fieldName] = correctedText;
+                                        existingRecord.ScanDate = DateTime.UtcNow;
+                                        dataManager.MarkAsUnsaved();
+                                        Log.Information($"[SaveField_Click] Updated non-key field '{fieldName}' for record with hash '{currentRecordHash}'");
+
+                                        // Update the ObservableCollection to trigger UI refresh
+                                        if (categoryCollections.TryGetValue(category.Name, out var collection))
+                                        {
+                                            Log.Debug($"[SaveField_Click] Found collection for category '{category.Name}' with {collection.Count} items");
+
+                                            // Find the record in the collection
+                                            var recordInCollection = collection.FirstOrDefault(r =>
+                                                dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == currentRecordHash);
+
+                                            if (recordInCollection != null)
+                                            {
+                                                Log.Debug($"[SaveField_Click] Found record in collection at index {collection.IndexOf(recordInCollection)}");
+
+                                                // Since recordInCollection is the same reference as in DataRecordDictionary,
+                                                // the field is already updated. We just need to trigger a UI refresh.
+                                                // Force a collection change notification by replacing the item
+                                                int index = collection.IndexOf(recordInCollection);
+                                                if (index >= 0)
+                                                {
+                                                    Log.Debug($"[SaveField_Click] Triggering UI refresh for index {index}");
+                                                    // Trigger UI update without creating duplicate
+                                                    collection[index] = recordInCollection;
+                                                    // Note: Setting the same reference should trigger INotifyCollectionChanged
+                                                }
+                                            }
+                                            else
+                                            {
+                                                Log.Warning($"[SaveField_Click] Could not find record with hash '{currentRecordHash}' in collection");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            Log.Warning($"[SaveField_Click] Could not find collection for category '{category.Name}'");
+                                        }
+                                    }
+
+                                    UpdateUnsavedIndicator();
+                                    Log.Information($"[SaveField_Click] Successfully updated field '{fieldName}' with value: {correctedText}");
+                                    Log.Debug($"[SaveField_Click] Current currentRecordHash after update: {currentRecordHash ?? "null"}");
+                                }
+                                else
+                                {
+                                    Log.Warning($"[SaveField_Click] CRITICAL ERROR: Could not find record with hash '{currentRecordHash}' in DataRecordDictionary");
+                                    Log.Debug($"[SaveField_Click] DataRecordDictionary contains {dataManager.DataRecordDictionary.Count} records");
+
+                                    // Check if the hash exists but is case-different
+                                    var similarHash = dataManager.DataRecordDictionary.Keys.FirstOrDefault(k =>
+                                        string.Equals(k, currentRecordHash, StringComparison.OrdinalIgnoreCase));
+
+                                    if (similarHash != null)
+                                    {
+                                        Log.Warning($"[SaveField_Click] Found a similar hash with case difference: '{similarHash}'");
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // No current record exists - this shouldn't happen during a Save operation
+                                // as Save is only available after scanning has populated currentRecordHash
+                                Log.Warning($"[SaveField_Click] CRITICAL ERROR: No currentRecordHash available when saving field '{fieldName}'");
+                                Log.Debug($"[SaveField_Click] fieldsBeingEdited.Count={fieldsBeingEdited.Count}, isScanning={isScanning}, wasScanningBeforeEdit={wasScanningBeforeEdit}");
+
+                                // Don't create a new record here - this is a save operation, not a create operation
+                                MessageBox.Show("No active record to update. Please scan first.", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            }
+                        }
                     }
 
                     // Clear the field from being edited set
+                    bool wasInSet = fieldsBeingEdited.Contains(fieldName);
                     fieldsBeingEdited.Remove(fieldName);
+                    Log.Debug($"[SaveField_Click] Removed '{fieldName}' from fieldsBeingEdited (was in set: {wasInSet}). Count now: {fieldsBeingEdited.Count}");
 
                     // Resume scanning if it was paused for editing
                     if (wasScanningBeforeEdit && !isScanning && GameProfileManager?.ActiveProfile != null && scanner != null)
                     {
-                        Log.Information($"Resuming scanning after save. wasScanningBeforeEdit={wasScanningBeforeEdit}, isScanning={isScanning}");
+                        Log.Information($"[SaveField_Click] Resuming scanning after save. wasScanningBeforeEdit={wasScanningBeforeEdit}, isScanning={isScanning}");
                         scanner.StartScanning(GameProfileManager.ActiveProfile);
                         isScanning = true;
                         wasScanningBeforeEdit = false;
@@ -1430,14 +1654,25 @@ namespace BlackoutScanner.Views
                             scanButton.Content = "Stop Scanning";
                         }
 
-                        Log.Information("Resumed scanning after saving field correction.");
+                        Log.Information("[SaveField_Click] Resumed scanning after saving field correction.");
                     }
                     else
                     {
-                        Log.Debug($"Not resuming scan. wasScanningBeforeEdit={wasScanningBeforeEdit}, isScanning={isScanning}");
+                        Log.Debug($"[SaveField_Click] Not resuming scanning. wasScanningBeforeEdit={wasScanningBeforeEdit}, isScanning={isScanning}");
+                        MessageBox.Show($"Field '{fieldName}' has been updated and saved.", "Field Saved", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                 }
+                else
+                {
+                    Log.Warning($"[SaveField_Click] Missing TextBox, ImageControl, or BitmapImage for field '{fieldName}'");
+                }
             }
+            else
+            {
+                Log.Warning("[SaveField_Click] Invalid sender or missing Tag");
+            }
+
+            Log.Debug($"[SaveField_Click] END - currentRecordHash: {currentRecordHash ?? "null"}");
         }
         private void UpdateScanDate(DateTime scanDate)
         {

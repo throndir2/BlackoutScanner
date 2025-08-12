@@ -212,6 +212,9 @@ namespace BlackoutScanner.Services
                     dataRecord.EntityIndex = entityIndex;
                     dataRecord.GroupId = groupId;
 
+                    // IMPORTANT: Include the category name in the data being sent
+                    updatedFields["__Category__"] = category.Name;
+
                     DataUpdated?.Invoke(updatedFields);
                     ScanDateUpdated?.Invoke(dataRecord.ScanDate);
 
@@ -284,6 +287,9 @@ namespace BlackoutScanner.Services
             {
                 Log.Warning($"No key fields defined for category '{category.Name}'");
             }
+
+            // IMPORTANT: Include the category name in the data being sent
+            updatedFields["__Category__"] = category.Name;
 
             DataUpdated?.Invoke(updatedFields);
             ScanDateUpdated?.Invoke(dataRecord.ScanDate);
