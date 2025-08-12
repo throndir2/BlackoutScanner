@@ -2291,11 +2291,11 @@ namespace BlackoutScanner.Views
                                     ServiceLocator.GetService<IFileSystem>(),
                                     SettingsManager
                                 );
-                                
+
                                 Dispatcher.InvokeAsync(() =>
                                 {
                                     AppendLogMessage("OCR engine reinitialization complete.");
-                                    
+
                                     // Re-enable scan button
                                     if (FindName("scanButton") is Button scanBtn)
                                     {
@@ -2309,7 +2309,7 @@ namespace BlackoutScanner.Views
                                 Dispatcher.InvokeAsync(() =>
                                 {
                                     AppendLogMessage($"Error reinitializing OCR engine: {ex.Message}");
-                                    
+
                                     // Re-enable scan button even on failure
                                     if (FindName("scanButton") is Button scanBtn)
                                     {
@@ -2327,7 +2327,7 @@ namespace BlackoutScanner.Views
                     }
                 }
             }
-            
+
             if (sender is Slider slider && SettingsManager != null)
             {
                 SettingsManager.Settings.OCRConfidenceThreshold = (float)slider.Value;

@@ -242,7 +242,7 @@ namespace BlackoutScanner.Services
 
                 OCRResult fieldResult = ProcessArea(gameWindowBitmap, fieldAbsoluteBounds, false, category.Name, field.Name);
                 updatedFields[field.Name] = fieldResult.Text;
-                
+
                 Log.Debug($"Field '{field.Name}' OCR result: '{fieldResult.Text}' (IsKeyField: {field.IsKeyField})");
 
                 using (var fieldBitmap = gameWindowBitmap.Clone(fieldAbsoluteBounds, gameWindowBitmap.PixelFormat))
@@ -262,7 +262,7 @@ namespace BlackoutScanner.Services
             // Log the data record details before saving
             Log.Debug($"DataRecord created - Category: {dataRecord.Category}, Profile: {dataRecord.GameProfile}");
             Log.Debug($"DataRecord fields: {string.Join(", ", dataRecord.Fields.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");
-            
+
             // Log key fields for debugging
             var keyFields = category.Fields.Where(f => f.IsKeyField).Select(f => f.Name).ToList();
             if (keyFields.Any())

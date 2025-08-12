@@ -445,13 +445,13 @@
         <!-- ComboBox Style with template for dark theme compatibility -->
         <Style TargetType="ComboBox">
                 <Setter Property="Background"
-                                Value="{StaticResource ControlBackgroundBrush}"/>
+                        Value="{StaticResource ControlBackgroundBrush}"/>
                 <Setter Property="Foreground"
-                                Value="{StaticResource ForegroundBrush}"/>
+                        Value="{StaticResource ForegroundBrush}"/>
                 <Setter Property="BorderBrush"
-                                Value="{StaticResource BorderBrush}"/>
+                        Value="{StaticResource BorderBrush}"/>
                 <Setter Property="BorderThickness"
-                                Value="1"/>
+                        Value="1"/>
                 <Setter Property="Template">
                         <Setter.Value>
                                 <ControlTemplate TargetType="ComboBox">
@@ -527,15 +527,15 @@
                                         </Grid>
                                         <ControlTemplate.Triggers>
                                                 <Trigger Property="IsEditable"
-                                                                Value="true">
+                                                         Value="true">
                                                         <Setter Property="IsTabStop"
-                                                                        Value="false"/>
+                                                                Value="false"/>
                                                         <Setter TargetName="PART_EditableTextBox"
-                                                                        Property="Visibility"
-                                                                        Value="Visible"/>
+                                                                Property="Visibility"
+                                                                Value="Visible"/>
                                                         <Setter TargetName="ContentSite"
-                                                                        Property="Visibility"
-                                                                        Value="Hidden"/>
+                                                                Property="Visibility"
+                                                                Value="Hidden"/>
                                                 </Trigger>
                                         </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -545,11 +545,11 @@
 
         <Style TargetType="ComboBoxItem">
                 <Setter Property="Background"
-                                Value="{StaticResource ControlBackgroundBrush}"/>
+                        Value="{StaticResource ControlBackgroundBrush}"/>
                 <Setter Property="Foreground"
-                                Value="{StaticResource ForegroundBrush}"/>
+                        Value="{StaticResource ForegroundBrush}"/>
                 <Setter Property="Padding"
-                                Value="5,2"/>
+                        Value="5,2"/>
                 <Setter Property="Template">
                         <Setter.Value>
                                 <ControlTemplate TargetType="ComboBoxItem">
@@ -562,23 +562,23 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                                 <Trigger Property="IsHighlighted"
-                                                                Value="True">
+                                                         Value="True">
                                                         <Setter TargetName="Border"
-                                                                        Property="Background"
-                                                                        Value="{StaticResource ButtonHoverBackgroundBrush}"/>
+                                                                Property="Background"
+                                                                Value="{StaticResource ButtonHoverBackgroundBrush}"/>
                                                 </Trigger>
                                                 <Trigger Property="IsSelected"
-                                                                Value="True">
+                                                         Value="True">
                                                         <Setter TargetName="Border"
-                                                                        Property="Background"
-                                                                        Value="{StaticResource AccentBrush}"/>
+                                                                Property="Background"
+                                                                Value="{StaticResource AccentBrush}"/>
                                                         <Setter Property="Foreground"
-                                                                        Value="{StaticResource AccentForegroundBrush}"/>
+                                                                Value="{StaticResource AccentForegroundBrush}"/>
                                                 </Trigger>
                                                 <Trigger Property="IsEnabled"
-                                                                Value="False">
+                                                         Value="False">
                                                         <Setter Property="Foreground"
-                                                                        Value="{StaticResource SecondaryForegroundBrush}"/>
+                                                                Value="{StaticResource SecondaryForegroundBrush}"/>
                                                 </Trigger>
                                         </ControlTemplate.Triggers>
                                 </ControlTemplate>

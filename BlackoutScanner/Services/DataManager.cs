@@ -342,7 +342,7 @@ namespace BlackoutScanner
 
                 // Get all key fields for this category
                 var categoryKeyFields = category.Fields.Where(f => f.IsKeyField).Select(f => f.Name).ToList();
-                
+
                 if (!categoryKeyFields.Any())
                 {
                     Log.Warning($"No key fields defined for category '{category.Name}' in profile '{profile.ProfileName}'");
@@ -351,14 +351,14 @@ namespace BlackoutScanner
 
                 // Build the hash from key field values
                 var hashParts = new List<string>();
-                
+
                 foreach (var keyFieldName in categoryKeyFields)
                 {
                     if (record.Fields.TryGetValue(keyFieldName, out var value))
                     {
                         // Convert the value to string for hashing
                         var stringValue = value?.ToString() ?? "";
-                        
+
                         // Only add non-empty values to the hash
                         if (!string.IsNullOrWhiteSpace(stringValue))
                         {
@@ -386,12 +386,12 @@ namespace BlackoutScanner
                 // Create a deterministic hash
                 var combinedString = string.Join("|", hashParts.OrderBy(x => x)); // Sort for consistency
                 combinedString = $"{profile.ProfileName}|{record.Category}|{combinedString}";
-                
+
                 using (var sha256 = System.Security.Cryptography.SHA256.Create())
                 {
                     var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(combinedString));
                     var hash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
-                    
+
                     Log.Debug($"Generated hash: {hash} from: {combinedString}");
                     return hash;
                 }

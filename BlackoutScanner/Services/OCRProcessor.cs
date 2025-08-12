@@ -247,7 +247,7 @@ namespace BlackoutScanner.Services
 
             // Get confidence threshold from settings
             float confidenceThreshold = _settingsManager?.Settings?.OCRConfidenceThreshold ?? 80.0f;
-            
+
             // Check if multi-engine mode is enabled
             bool useMultiEngine = _settingsManager?.Settings?.UseMultiEngineOCR ?? false;
 
@@ -288,19 +288,19 @@ namespace BlackoutScanner.Services
                 {
                     var engine = tesseractEngines[combinedKey];
                     var lockObj = engineLocks[combinedKey];
-                    
+
                     lock (lockObj)
                     {
                         var result = ProcessImageWithTesseract(bitmap, engine);
                         result.ImageHash = imageHash;
                         ocrResultsCache[imageHash] = result;
-                        
+
                         if (saveDebugImages)
                         {
                             SaveDebugImage(bitmap, imageHash, category, fieldName, result.Text,
                                 CalculateAverageConfidence(result), saveDebugImages, debugImagesFolder, verboseLogging);
                         }
-                        
+
                         return result;
                     }
                 }
@@ -405,7 +405,7 @@ namespace BlackoutScanner.Services
                     }
                 }
             }
-            
+
             // Check if we should use multi-engine mode
             bool useMultiEngine = _settingsManager?.Settings?.UseMultiEngineOCR ?? false;
 

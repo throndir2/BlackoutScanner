@@ -289,49 +289,49 @@
                                                 <GroupBox Grid.Row="4"
                                                           Header="OCR Settings"
                                                           Margin="0,10,0,10">
-                                                    <Grid Margin="10">
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                        </Grid.RowDefinitions>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                            <ColumnDefinition Width="*"/>
-                                                        </Grid.ColumnDefinitions>
+                                                        <Grid Margin="10">
+                                                                <Grid.RowDefinitions>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                </Grid.RowDefinitions>
+                                                                <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
 
-                                                        <!-- Multi-Engine OCR Mode -->
-                                                        <CheckBox Grid.Row="0"
-                                                                  Grid.Column="0"
-                                                                  Grid.ColumnSpan="2"
-                                                                  x:Name="useMultiEngineOCRCheckBox"
-                                                                  Content="Enhanced OCR Accuracy (slower)"
-                                                                  ToolTip="When enabled, uses multiple language engines for better accuracy at the cost of speed. When disabled, uses a single combined engine for faster processing."
-                                                                  Margin="0,5,0,5"
-                                                                  Click="OCRSettings_Changed"/>
+                                                                <!-- Multi-Engine OCR Mode -->
+                                                                <CheckBox Grid.Row="0"
+                                                                          Grid.Column="0"
+                                                                          Grid.ColumnSpan="2"
+                                                                          x:Name="useMultiEngineOCRCheckBox"
+                                                                          Content="Enhanced OCR Accuracy (slower)"
+                                                                          ToolTip="When enabled, uses multiple language engines for better accuracy at the cost of speed. When disabled, uses a single combined engine for faster processing."
+                                                                          Margin="0,5,0,5"
+                                                                          Click="OCRSettings_Changed"/>
 
-                                                        <!-- OCR Confidence Threshold -->
-                                                        <TextBlock Grid.Row="1"
-                                                                   Grid.Column="0"
-                                                                   Text="OCR Confidence Threshold:"
-                                                                   VerticalAlignment="Center"
-                                                                   Margin="0,5,10,5"/>
-                                                        <StackPanel Grid.Row="1"
-                                                                    Grid.Column="1"
-                                                                    Orientation="Horizontal">
-                                                            <Slider x:Name="ocrConfidenceSlider"
-                                                                    Minimum="50"
-                                                                    Maximum="100"
-                                                                    Value="80"
-                                                                    Width="200"
-                                                                    TickFrequency="10"
-                                                                    IsSnapToTickEnabled="True"
-                                                                    ValueChanged="OCRConfidenceSlider_Changed"/>
-                                                            <TextBlock Text="{Binding ElementName=ocrConfidenceSlider, Path=Value, StringFormat={}{0:F0}%}"
-                                                                       VerticalAlignment="Center"
-                                                                       Margin="10,0,0,0"
-                                                                       Width="40"/>
-                                                        </StackPanel>
-                                                    </Grid>
+                                                                <!-- OCR Confidence Threshold -->
+                                                                <TextBlock Grid.Row="1"
+                                                                           Grid.Column="0"
+                                                                           Text="OCR Confidence Threshold:"
+                                                                           VerticalAlignment="Center"
+                                                                           Margin="0,5,10,5"/>
+                                                                <StackPanel Grid.Row="1"
+                                                                            Grid.Column="1"
+                                                                            Orientation="Horizontal">
+                                                                        <Slider x:Name="ocrConfidenceSlider"
+                                                                                Minimum="50"
+                                                                                Maximum="100"
+                                                                                Value="80"
+                                                                                Width="200"
+                                                                                TickFrequency="10"
+                                                                                IsSnapToTickEnabled="True"
+                                                                                ValueChanged="OCRConfidenceSlider_Changed"/>
+                                                                        <TextBlock Text="{Binding ElementName=ocrConfidenceSlider, Path=Value, StringFormat={}{0:F0}%}"
+                                                                                   VerticalAlignment="Center"
+                                                                                   Margin="10,0,0,0"
+                                                                                   Width="40"/>
+                                                                </StackPanel>
+                                                        </Grid>
                                                 </GroupBox>
 
                                                 <!-- Hotkey Settings -->
@@ -395,7 +395,7 @@
                                                                 </Grid>
 
                                                                 <StackPanel Orientation="Horizontal"
-                                                                                Margin="5,10,0,10">
+                                                                            Margin="5,10,0,10">
                                                                         <CheckBox x:Name="useLocalTimeCheckBox"
                                                                                   Content="Use Local Time in Exports"
                                                                                   IsChecked="{Binding Path=SettingsManager.Settings.UseLocalTimeInExports, Mode=TwoWay}"
