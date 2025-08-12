@@ -16,6 +16,9 @@
 - Configurable OCR confidence threshold via slider control
 - Button to reinitialize OCR engines after changing settings
 
+### Fixed
+- Data tab only showing the first scanned record and not updating with subsequent records
+
 ## [2.0.3] - 2025-08-10
 
 ### Added
