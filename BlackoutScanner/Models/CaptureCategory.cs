@@ -30,6 +30,48 @@ namespace BlackoutScanner.Models
             }
         }
 
+        private bool _isMultiEntity = false;
+        public bool IsMultiEntity
+        {
+            get => _isMultiEntity;
+            set
+            {
+                if (_isMultiEntity != value)
+                {
+                    _isMultiEntity = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _entityHeightOffset = 40;
+        public int EntityHeightOffset
+        {
+            get => _entityHeightOffset;
+            set
+            {
+                if (_entityHeightOffset != value)
+                {
+                    _entityHeightOffset = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _maxEntityCount = 10;
+        public int MaxEntityCount
+        {
+            get => _maxEntityCount;
+            set
+            {
+                if (_maxEntityCount != value)
+                {
+                    _maxEntityCount = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private CategoryComparisonMode _comparisonMode = CategoryComparisonMode.Text;
         public CategoryComparisonMode ComparisonMode
         {

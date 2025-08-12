@@ -402,6 +402,34 @@
                         Value="{StaticResource BorderBrush}"/>
         </Style>
 
+        <!-- Tooltip Style -->
+        <Style TargetType="ToolTip">
+                <Setter Property="Background"
+                        Value="{StaticResource ControlBackgroundBrush}"/>
+                <Setter Property="Foreground"
+                        Value="{StaticResource ForegroundBrush}"/>
+                <Setter Property="BorderBrush"
+                        Value="{StaticResource BorderBrush}"/>
+                <Setter Property="BorderThickness"
+                        Value="1"/>
+                <Setter Property="Padding"
+                        Value="8,4"/>
+                <Setter Property="Template">
+                        <Setter.Value>
+                                <ControlTemplate TargetType="ToolTip">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="3"
+                                                Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                                  ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                                        </Border>
+                                </ControlTemplate>
+                        </Setter.Value>
+                </Setter>
+        </Style>
+
         <!-- Add base grid styling -->
         <Style TargetType="Grid">
                 <Setter Property="Background"

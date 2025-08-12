@@ -114,7 +114,8 @@ namespace BlackoutScanner.Views
 
         private void ConvertRelativeBoundsToAbsolute()
         {
-            var gameWindowRect = screenCapture.GetWindowRectangle(Profile.GameWindowTitle);
+            // IMPORTANT: Use GetClientRectangle to match what's used when defining fields
+            var gameWindowRect = screenCapture.GetClientRectangle(Profile.GameWindowTitle);
             if (gameWindowRect.IsEmpty)
             {
                 Log.Warning("Could not find game window '{GameTitle}' to calculate absolute bounds. Bounds will be empty.", Profile.GameWindowTitle);
@@ -378,7 +379,11 @@ namespace BlackoutScanner.Views
                     TextToCompare = category.TextToCompare,
                     RelativeBounds = category.RelativeBounds,
                     Bounds = category.Bounds,
-                    PreviewImageData = category.PreviewImageData
+                    PreviewImageData = category.PreviewImageData,
+                    // Add multi-entity properties
+                    IsMultiEntity = category.IsMultiEntity,
+                    EntityHeightOffset = category.EntityHeightOffset,
+                    MaxEntityCount = category.MaxEntityCount
                 };
 
                 // Set the preview image separately since it's not part of the constructor
@@ -408,16 +413,18 @@ namespace BlackoutScanner.Views
 
             Log.Information($"Save_Click: Profile now has {Profile.Categories.Count} categories after update");
 
-            // Log final state
+            // Log final state including multi-entity settings
             foreach (var cat in Profile.Categories)
             {
+                Log.Information($"Save_Click: Category '{cat.Name}' - IsMultiEntity: {cat.IsMultiEntity}, EntityHeightOffset: {cat.EntityHeightOffset}, MaxEntityCount: {cat.MaxEntityCount}");
                 foreach (var field in cat.Fields)
                 {
                     Log.Information($"Save_Click: Final state - Category: '{cat.Name}', Field: '{field.Name}', IsKeyField: {field.IsKeyField}");
                 }
             }
 
-            var gameWindowRect = screenCapture.GetWindowRectangle(Profile.GameWindowTitle);
+            // IMPORTANT: Use GetClientRectangle to match what's used when defining fields
+            var gameWindowRect = screenCapture.GetClientRectangle(Profile.GameWindowTitle);
             if (gameWindowRect.IsEmpty)
             {
                 Log.Warning("Game window '{GameTitle}' not found. Relative bounds will be calculated against an empty rectangle.", Profile.GameWindowTitle);
@@ -522,6 +529,151 @@ namespace BlackoutScanner.Views
             {
                 return FindParent<T>(parentObject);
             }
+        }
+
+        // Multi-entity functionality
+        private void OnMultiEntityChanged(object sender, RoutedEventArgs e)
+        {
+            var checkBox = sender as CheckBox;
+            if (checkBox == null) return;
+
+            var selectedCategory = checkBox.DataContext as CaptureCategory;
+            if (selectedCategory == null) return;
+
+            // Get the parent StackPanel that contains our multi-entity controls
+            StackPanel? panel = null;
+            var parent = VisualTreeHelper.GetParent(checkBox);
+            while (parent != null)
+            {
+                if (parent is Grid grid)
+                {
+                    foreach (var child in LogicalTreeHelper.GetChildren(grid))
+                    {
+                        if (child is StackPanel sp && sp.Name == "pnlMultiEntitySettings")
+                        {
+                            panel = sp;
+                            break;
+                        }
+                    }
+                    if (panel != null) break;
+                }
+                parent = VisualTreeHelper.GetParent(parent);
+            }
+
+            if (selectedCategory.IsMultiEntity)
+            {
+                // Set default values if not already set
+                if (selectedCategory.EntityHeightOffset == 0)
+                    selectedCategory.EntityHeightOffset = 40;
+                if (selectedCategory.MaxEntityCount == 0)
+                    selectedCategory.MaxEntityCount = 10;
+
+                if (panel != null)
+                    panel.Visibility = Visibility.Visible;
+
+                Log.Information($"Enabled multi-entity mode for category '{selectedCategory.Name}'");
+            }
+            else
+            {
+                if (panel != null)
+                    panel.Visibility = Visibility.Collapsed;
+
+                Log.Information($"Disabled multi-entity mode for category '{selectedCategory.Name}'");
+            }
+        }
+
+        private void OnPreviewMultiEntity(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            if (button == null) return;
+
+            var selectedCategory = button.DataContext as CaptureCategory;
+            if (selectedCategory == null) return;
+
+            if (!selectedCategory.IsMultiEntity)
+                return;
+
+            // Validate that we have a category area defined first
+            if (selectedCategory.Bounds == Rectangle.Empty || selectedCategory.Bounds.Width == 0 || selectedCategory.Bounds.Height == 0)
+            {
+                MessageBox.Show("Please define the Category Area first before previewing multi-entity rows.",
+                               "Category Area Required", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // Validate input
+            if (selectedCategory.MaxEntityCount < 1 || selectedCategory.MaxEntityCount > 50)
+            {
+                MessageBox.Show("Please enter a valid number between 1 and 50 for max rows.",
+                               "Invalid Input", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // We can use the profile's game window title
+            var gameTitle = Profile.GameWindowTitle;
+            if (string.IsNullOrWhiteSpace(gameTitle))
+            {
+                MessageBox.Show("Please enter a game window title first.", "Game Title Required");
+                return;
+            }
+
+            var gameWindowRect = screenCapture.GetClientRectangle(gameTitle);
+            if (gameWindowRect.IsEmpty)
+            {
+                MessageBox.Show($"Could not find a window with the title '{gameTitle}'.\nPlease ensure the game is running and the title is correct.", "Window Not Found");
+                return;
+            }
+
+            // Minimize the profile editor window temporarily
+            this.WindowState = WindowState.Minimized;
+
+            // Give the game window focus
+            screenCapture.BringGameWindowToFront(gameTitle);
+
+            // Small delay to ensure window state changes are applied
+            System.Threading.Thread.Sleep(200);
+
+            // Use our new MultiEntitySelectorWindow to preview and adjust the row offset
+            var multiEntityWindow = new MultiEntitySelectorWindow(gameWindowRect, selectedCategory, gameTitle);
+            var result = multiEntityWindow.ShowDialog();
+
+            if (result.HasValue && result.Value)
+            {
+                // Update the entity height offset with the user's choice
+                selectedCategory.EntityHeightOffset = multiEntityWindow.UpdatedHeightOffset;
+                Log.Information($"Multi-entity row height offset updated to {selectedCategory.EntityHeightOffset} pixels");
+            }
+
+            // Restore the profile editor window
+            this.WindowState = WindowState.Normal;
+            this.Activate();
+            this.Focus();
+            /*
+            var selector = new AreaSelectorWindow(gameWindowRect)
+            {
+                IsMultiEntityPreviewMode = true,
+                CategoryToPreview = selectedCategory,
+                UpdatedHeightOffset = selectedCategory.EntityHeightOffset
+            };
+            
+            var result = selector.ShowDialog();
+            
+            if (result == true)
+            {
+                // Get the updated height offset from the selector
+                int newOffset = selector.UpdatedHeightOffset;
+                
+                if (newOffset != selectedCategory.EntityHeightOffset)
+                {
+                    selectedCategory.EntityHeightOffset = newOffset;
+                    Log.Information($"Updated multi-entity offset for category '{selectedCategory.Name}' to {selectedCategory.EntityHeightOffset}px");
+                }
+            }
+            */
+
+            // Restore the profile editor window
+            this.WindowState = WindowState.Normal;
+            this.Activate();
         }
 
         // Event handler for DataGrid cell editing

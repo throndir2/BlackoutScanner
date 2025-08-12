@@ -137,36 +137,158 @@ namespace BlackoutScanner.Services
                         // Notify that we're scanning this category
                         CategoryScanning?.Invoke(category.Name);
 
-                        var dataRecord = new DataRecord();
-                        var updatedFields = new Dictionary<string, object>();
-
-                        foreach (var field in category.Fields)
+                        if (category.IsMultiEntity)
                         {
-                            // Convert relative bounds to absolute for this window size
-                            var fieldAbsoluteBounds = field.RelativeBounds.ToAbsolute(containerRect);
-
-                            OCRResult fieldResult = ProcessArea(gameWindowBitmap, fieldAbsoluteBounds, false, category.Name, field.Name);
-                            updatedFields[field.Name] = fieldResult.Text;
-
-                            using (var fieldBitmap = gameWindowBitmap.Clone(fieldAbsoluteBounds, gameWindowBitmap.PixelFormat))
-                            {
-                                ImageUpdated?.Invoke(field.Name, ocrProcessor.ConvertBitmapToBitmapImage(fieldBitmap));
-                            }
+                            ProcessMultiEntityCategory(category, gameWindowBitmap, containerRect);
                         }
-
-                        // IMPORTANT: Copy the updatedFields to dataRecord.Fields
-                        dataRecord.Fields = new Dictionary<string, object>(updatedFields);
-                        dataRecord.ScanDate = DateTime.UtcNow;
-                        dataRecord.Category = category.Name; // Add category name
-                        dataRecord.GameProfile = activeProfile.ProfileName; // Add profile name
-
-                        DataUpdated?.Invoke(updatedFields);
-                        ScanDateUpdated?.Invoke(dataRecord.ScanDate);
-
-                        dataManager.AddOrUpdateRecord(dataRecord, activeProfile);
+                        else
+                        {
+                            ProcessSingleEntityCategory(category, gameWindowBitmap, containerRect);
+                        }
                     }
                 }
             }
+        }
+
+        private void ProcessMultiEntityCategory(CaptureCategory category, Bitmap gameWindowBitmap, Rectangle containerRect)
+        {
+            if (activeProfile == null) return;
+
+            // Create a group ID for this scan session
+            var groupId = Guid.NewGuid();
+            var scanTime = DateTime.UtcNow;
+
+            // Process each entity based on the configured max count
+            for (int entityIndex = 0; entityIndex < category.MaxEntityCount; entityIndex++)
+            {
+                var offsetY = entityIndex * category.EntityHeightOffset;
+                var dataRecord = new DataRecord();
+                var updatedFields = new Dictionary<string, object>();
+                bool hasValidData = false;
+
+                foreach (var field in category.Fields)
+                {
+                    // First convert the field's relative bounds to absolute
+                    var fieldAbsoluteBounds = field.RelativeBounds.ToAbsolute(containerRect);
+
+                    // Then apply the pixel offset to the absolute bounds
+                    var offsetFieldBounds = new Rectangle(
+                        fieldAbsoluteBounds.X,
+                        fieldAbsoluteBounds.Y + offsetY,  // Now we're adding pixels to pixels
+                        fieldAbsoluteBounds.Width,
+                        fieldAbsoluteBounds.Height
+                    );
+
+                    // Check if the field is still within screen bounds
+                    if (offsetFieldBounds.Y + offsetFieldBounds.Height > containerRect.Height)
+                    {
+                        Log.Debug($"Entity {entityIndex} field {field.Name} exceeds screen bounds, stopping scan");
+                        break;
+                    }
+
+                    OCRResult fieldResult = ProcessArea(gameWindowBitmap, offsetFieldBounds, false, category.Name, $"{field.Name}_row{entityIndex}");
+                    updatedFields[field.Name] = fieldResult.Text;
+
+                    // Check if this field has any data
+                    if (!string.IsNullOrWhiteSpace(fieldResult.Text))
+                    {
+                        hasValidData = true;
+                    }
+
+                    using (var fieldBitmap = gameWindowBitmap.Clone(offsetFieldBounds, gameWindowBitmap.PixelFormat))
+                    {
+                        // Use the entity index in the field name for multi-entity display
+                        ImageUpdated?.Invoke($"{field.Name} (Row {entityIndex + 1})", ocrProcessor.ConvertBitmapToBitmapImage(fieldBitmap));
+                    }
+                }
+
+                // Only save the record if it contains valid data
+                if (hasValidData)
+                {
+                    dataRecord.Fields = new Dictionary<string, object>(updatedFields);
+                    dataRecord.ScanDate = scanTime;
+                    dataRecord.Category = category.Name;
+                    dataRecord.GameProfile = activeProfile.ProfileName;
+                    dataRecord.EntityIndex = entityIndex;
+                    dataRecord.GroupId = groupId;
+
+                    DataUpdated?.Invoke(updatedFields);
+                    ScanDateUpdated?.Invoke(dataRecord.ScanDate);
+
+                    dataManager.AddOrUpdateRecord(dataRecord, activeProfile);
+                }
+                else
+                {
+                    // If we find an empty row, we might want to stop scanning
+                    // This is optional based on requirements
+                    Log.Debug($"Entity {entityIndex} appears empty, continuing to next entity");
+                }
+            }
+        }
+
+        private void ProcessSingleEntityCategory(CaptureCategory category, Bitmap gameWindowBitmap, Rectangle containerRect)
+        {
+            if (activeProfile == null) return;
+
+            Log.Debug($"Processing single entity category: {category.Name}");
+
+            var dataRecord = new DataRecord();
+            var updatedFields = new Dictionary<string, object>();
+
+            foreach (var field in category.Fields)
+            {
+                // Convert relative bounds to absolute for this window size
+                var fieldAbsoluteBounds = field.RelativeBounds.ToAbsolute(containerRect);
+
+                OCRResult fieldResult = ProcessArea(gameWindowBitmap, fieldAbsoluteBounds, false, category.Name, field.Name);
+                updatedFields[field.Name] = fieldResult.Text;
+                
+                Log.Debug($"Field '{field.Name}' OCR result: '{fieldResult.Text}' (IsKeyField: {field.IsKeyField})");
+
+                using (var fieldBitmap = gameWindowBitmap.Clone(fieldAbsoluteBounds, gameWindowBitmap.PixelFormat))
+                {
+                    ImageUpdated?.Invoke(field.Name, ocrProcessor.ConvertBitmapToBitmapImage(fieldBitmap));
+                }
+            }
+
+            // IMPORTANT: Copy the updatedFields to dataRecord.Fields
+            dataRecord.Fields = new Dictionary<string, object>(updatedFields);
+            dataRecord.ScanDate = DateTime.UtcNow;
+            dataRecord.Category = category.Name; // Add category name
+            dataRecord.GameProfile = activeProfile.ProfileName; // Add profile name
+            dataRecord.EntityIndex = null; // Not a multi-entity scan
+            dataRecord.GroupId = null;
+
+            // Log the data record details before saving
+            Log.Debug($"DataRecord created - Category: {dataRecord.Category}, Profile: {dataRecord.GameProfile}");
+            Log.Debug($"DataRecord fields: {string.Join(", ", dataRecord.Fields.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");
+            
+            // Log key fields for debugging
+            var keyFields = category.Fields.Where(f => f.IsKeyField).Select(f => f.Name).ToList();
+            if (keyFields.Any())
+            {
+                Log.Debug($"Key fields for category '{category.Name}': {string.Join(", ", keyFields)}");
+                foreach (var keyField in keyFields)
+                {
+                    if (dataRecord.Fields.TryGetValue(keyField, out var value))
+                    {
+                        Log.Debug($"Key field '{keyField}' value: '{value}'");
+                    }
+                    else
+                    {
+                        Log.Warning($"Key field '{keyField}' not found in captured data!");
+                    }
+                }
+            }
+            else
+            {
+                Log.Warning($"No key fields defined for category '{category.Name}'");
+            }
+
+            DataUpdated?.Invoke(updatedFields);
+            ScanDateUpdated?.Invoke(dataRecord.ScanDate);
+
+            dataManager.AddOrUpdateRecord(dataRecord, activeProfile);
         }
 
         private OCRResult ProcessArea(Bitmap gameWindowBitmap, Rectangle area, bool numericalOnly = false, string category = "", string fieldName = "")

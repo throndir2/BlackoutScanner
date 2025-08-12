@@ -23,6 +23,9 @@ namespace BlackoutScanner.Views
 
             targetWindowRect = gameWindowRect;
 
+            // Add keyboard shortcuts here, only once
+            this.PreviewKeyDown += Window_PreviewKeyDown;
+
             // Get DPI scale - but we need to get it after the window is loaded
             this.Loaded += (s, e) =>
             {
@@ -58,9 +61,6 @@ namespace BlackoutScanner.Views
             Canvas.SetTop(gameAreaBorder, targetWindowRect.Top / dpiScale);
             selectionCanvas.Children.Insert(0, gameAreaBorder);
 
-            // Add keyboard shortcuts
-            this.PreviewKeyDown += Window_PreviewKeyDown;
-
             // Focus the window
             this.Focus();
 
@@ -83,7 +83,15 @@ namespace BlackoutScanner.Views
             }
             else if (e.Key == Key.Escape)
             {
-                DialogResult = false;
+                try
+                {
+                    DialogResult = false;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // If we can't set DialogResult, just log and continue
+                    Log.Warning($"Could not set DialogResult on Escape: {ex.Message}");
+                }
                 Close();
             }
         }
@@ -190,7 +198,16 @@ namespace BlackoutScanner.Views
                     (int)Math.Round(relHeight)
                 );
 
-                DialogResult = true;
+                // Only set DialogResult if we're in a dialog context
+                try
+                {
+                    DialogResult = true;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // If we can't set DialogResult, just close the window
+                    Log.Warning($"Could not set DialogResult, closing window directly: {ex.Message}");
+                }
                 Close();
             }
             else
@@ -206,7 +223,15 @@ namespace BlackoutScanner.Views
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            DialogResult = false;
+            try
+            {
+                DialogResult = false;
+            }
+            catch (InvalidOperationException ex)
+            {
+                // If we can't set DialogResult, just log and continue
+                Log.Warning($"Could not set DialogResult on Cancel: {ex.Message}");
+            }
             Close();
         }
     }

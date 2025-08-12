@@ -1,6 +1,21 @@
 ```markdown
 # Blackout Scanner Changelog
 
+## [2.0.4] - 2025-08-12
+
+### Added
+- Multi-entity scanning support for capturing multiple data rows at once (leaderboards, player lists)
+- Configurable row height offset for multi-entity captures
+- Maximum entity count setting to limit the number of rows scanned
+- Row index tracking in exports and data records
+- Group ID for associating multiple entities from the same scan
+- Enhanced export formats for multi-entity data
+- OCR performance mode selection in Configuration tab
+  - "Fast Processing" mode (default) - uses a single combined language engine for better speed
+  - "Enhanced Accuracy" mode - uses multiple language engines for better OCR results at cost of speed
+- Configurable OCR confidence threshold via slider control
+- Button to reinitialize OCR engines after changing settings
+
 ## [2.0.3] - 2025-08-10
 
 ### Added

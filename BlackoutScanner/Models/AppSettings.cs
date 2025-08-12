@@ -12,6 +12,8 @@ namespace BlackoutScanner.Models
         private string _debugImagesFolder = "DebugImages";
         private string _hotKey = "Ctrl+Q";
         private bool _useLocalTimeInExports = false;
+        private bool _useMultiEngineOCR = false;
+        private float _ocrConfidenceThreshold = 80.0f;
 
         public string ExportFolder
         {
@@ -86,6 +88,32 @@ namespace BlackoutScanner.Models
                 if (_hotKey != value)
                 {
                     _hotKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool UseMultiEngineOCR
+        {
+            get => _useMultiEngineOCR;
+            set
+            {
+                if (_useMultiEngineOCR != value)
+                {
+                    _useMultiEngineOCR = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public float OCRConfidenceThreshold
+        {
+            get => _ocrConfidenceThreshold;
+            set
+            {
+                if (_ocrConfidenceThreshold != value)
+                {
+                    _ocrConfidenceThreshold = value;
                     OnPropertyChanged();
                 }
             }

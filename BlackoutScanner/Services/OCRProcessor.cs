@@ -240,13 +240,16 @@ namespace BlackoutScanner.Services
             return ProcessImageWithFallback(bitmap, attempt, numericalOnly, saveDebugImages, debugImagesFolder, verboseLogging, category, fieldName);
         }
 
-        // Keep original method for backward compatibility
+        // Process image with fallback to different OCR engines if needed
         public OCRResult ProcessImageWithFallback(Bitmap bitmap, int attempt, bool numericalOnly, bool saveDebugImages = false, string debugImagesFolder = "DebugImages", bool verboseLogging = false, string category = "", string fieldName = "")
         {
             Log.Debug($"[OCRProcessor.ProcessImageWithFallback] Called with saveDebugImages={saveDebugImages}, category='{category}', field='{fieldName}'");
 
-            // Define a default confidence threshold (previously it was a parameter)
-            float confidenceThreshold = 80.0f;
+            // Get confidence threshold from settings
+            float confidenceThreshold = _settingsManager?.Settings?.OCRConfidenceThreshold ?? 80.0f;
+            
+            // Check if multi-engine mode is enabled
+            bool useMultiEngine = _settingsManager?.Settings?.UseMultiEngineOCR ?? false;
 
             BitmapImage bitmapImage = ConvertBitmapToBitmapImage(bitmap);
 
@@ -277,12 +280,39 @@ namespace BlackoutScanner.Services
                 }
             }
 
+            // In single-engine mode, just process once with the combined engine
+            if (!useMultiEngine)
+            {
+                var combinedKey = string.Join("+", _supportedLanguages);
+                if (tesseractEngines.ContainsKey(combinedKey))
+                {
+                    var engine = tesseractEngines[combinedKey];
+                    var lockObj = engineLocks[combinedKey];
+                    
+                    lock (lockObj)
+                    {
+                        var result = ProcessImageWithTesseract(bitmap, engine);
+                        result.ImageHash = imageHash;
+                        ocrResultsCache[imageHash] = result;
+                        
+                        if (saveDebugImages)
+                        {
+                            SaveDebugImage(bitmap, imageHash, category, fieldName, result.Text,
+                                CalculateAverageConfidence(result), saveDebugImages, debugImagesFolder, verboseLogging);
+                        }
+                        
+                        return result;
+                    }
+                }
+            }
+
+            // If we're using multi-engine mode or the single combined engine isn't available,
+            // fall back to the original multiple-engine logic
             OCRResult? bestResult = null;
             float highestAverageConfidence = 0;
 
             // With some numbers, the eng model isn't able to parse the value.
-            //var enginesToUse = numericalOnly ? new[] { "numerical" } : tesseractEngines.Keys.ToArray();
-            var enginesToUse = tesseractEngines.Keys.ToArray();
+            var enginesToUse = numericalOnly ? new[] { "numerical" } : tesseractEngines.Keys.ToArray();
 
             foreach (var key in enginesToUse)
             {
@@ -375,7 +405,18 @@ namespace BlackoutScanner.Services
                     }
                 }
             }
+            
+            // Check if we should use multi-engine mode
+            bool useMultiEngine = _settingsManager?.Settings?.UseMultiEngineOCR ?? false;
 
+            if (useMultiEngine)
+            {
+                Log.Information("Initializing OCR in Enhanced Accuracy mode (multiple engines)");
+            }
+            else
+            {
+                Log.Information("Initializing OCR in Fast Processing mode (single combined engine)");
+            }
 
             // Initialize a combined engine with all languages
             string allLanguagesCombined = string.Join("+", supportedLanguages);

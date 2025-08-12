@@ -274,6 +274,14 @@ namespace BlackoutScanner
             {
                 headers.Add(field.Name);
             }
+
+            // Add row index if this is a multi-entity category
+            if (category.IsMultiEntity)
+            {
+                headers.Add("RowIndex");
+                headers.Add("GroupId");
+            }
+
             headers.Add("ScanDate");
 
             sb.AppendLine(string.Join("\t", headers));
@@ -288,6 +296,14 @@ namespace BlackoutScanner
                         // Convert to local time if specified
                         var scanDate = useLocalTime ? record.ScanDate.ToLocalTime() : record.ScanDate;
                         values.Add(scanDate.ToString("yyyy-MM-dd HH:mm:ss"));
+                    }
+                    else if (header == "RowIndex" && record.EntityIndex.HasValue)
+                    {
+                        values.Add((record.EntityIndex.Value + 1).ToString()); // 1-based for user display
+                    }
+                    else if (header == "GroupId" && record.GroupId.HasValue)
+                    {
+                        values.Add(record.GroupId.Value.ToString());
                     }
                     else if (record.Fields.TryGetValue(header, out var value))
                     {
@@ -314,18 +330,77 @@ namespace BlackoutScanner
 
         public string GenerateDataHash(DataRecord record, GameProfile profile)
         {
-            var keyFields = new List<string>();
-            foreach (var category in profile.Categories)
+            try
             {
-                foreach (var field in category.Fields)
+                // Find the category for this record
+                var category = profile.Categories.FirstOrDefault(c => c.Name == record.Category);
+                if (category == null)
                 {
-                    if (field.IsKeyField && record.Fields.TryGetValue(field.Name, out var value))
+                    Log.Warning($"Category '{record.Category}' not found in profile '{profile.ProfileName}'");
+                    return string.Empty;
+                }
+
+                // Get all key fields for this category
+                var categoryKeyFields = category.Fields.Where(f => f.IsKeyField).Select(f => f.Name).ToList();
+                
+                if (!categoryKeyFields.Any())
+                {
+                    Log.Warning($"No key fields defined for category '{category.Name}' in profile '{profile.ProfileName}'");
+                    return string.Empty;
+                }
+
+                // Build the hash from key field values
+                var hashParts = new List<string>();
+                
+                foreach (var keyFieldName in categoryKeyFields)
+                {
+                    if (record.Fields.TryGetValue(keyFieldName, out var value))
                     {
-                        keyFields.Add(value?.ToString() ?? string.Empty);
+                        // Convert the value to string for hashing
+                        var stringValue = value?.ToString() ?? "";
+                        
+                        // Only add non-empty values to the hash
+                        if (!string.IsNullOrWhiteSpace(stringValue))
+                        {
+                            hashParts.Add($"{keyFieldName}:{stringValue}");
+                            Log.Debug($"Adding key field to hash: {keyFieldName} = {stringValue}");
+                        }
+                        else
+                        {
+                            Log.Debug($"Key field '{keyFieldName}' has empty value, skipping from hash");
+                        }
+                    }
+                    else
+                    {
+                        Log.Debug($"Key field '{keyFieldName}' not found in record fields");
                     }
                 }
+
+                // If we have no hash parts, we can't generate a valid hash
+                if (!hashParts.Any())
+                {
+                    Log.Warning($"No valid key field values found for generating hash. Category: {category.Name}, Available fields: {string.Join(", ", record.Fields.Keys)}");
+                    return string.Empty;
+                }
+
+                // Create a deterministic hash
+                var combinedString = string.Join("|", hashParts.OrderBy(x => x)); // Sort for consistency
+                combinedString = $"{profile.ProfileName}|{record.Category}|{combinedString}";
+                
+                using (var sha256 = System.Security.Cryptography.SHA256.Create())
+                {
+                    var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(combinedString));
+                    var hash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+                    
+                    Log.Debug($"Generated hash: {hash} from: {combinedString}");
+                    return hash;
+                }
             }
-            return string.Join("-", keyFields);
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error generating hash for data record");
+                return string.Empty;
+            }
         }
 
         public void AddOrUpdateRecord(DataRecord newRecord, GameProfile profile)

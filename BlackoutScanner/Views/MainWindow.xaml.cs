@@ -1537,6 +1537,24 @@ namespace BlackoutScanner.Views
                         {
                             Log.Warning("[LoadDebugSettingsFromManager] debugImagesFolderTextBox not found, cannot update UI");
                         }
+
+                        // Update OCR settings
+                        var multiEngineCheckBox = this.FindName("useMultiEngineOCRCheckBox") as CheckBox;
+                        var confidenceSlider = this.FindName("ocrConfidenceSlider") as Slider;
+
+                        if (multiEngineCheckBox != null)
+                        {
+                            multiEngineCheckBox.Click -= OCRSettings_Changed;
+                            multiEngineCheckBox.IsChecked = SettingsManager.Settings.UseMultiEngineOCR;
+                            multiEngineCheckBox.Click += OCRSettings_Changed;
+                        }
+
+                        if (confidenceSlider != null)
+                        {
+                            confidenceSlider.ValueChanged -= OCRConfidenceSlider_Changed;
+                            confidenceSlider.Value = SettingsManager.Settings.OCRConfidenceThreshold;
+                            confidenceSlider.ValueChanged += OCRConfidenceSlider_Changed;
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -2228,6 +2246,103 @@ namespace BlackoutScanner.Views
             else
             {
                 RegisterHotKey(defaultHotKey);
+            }
+        }
+
+        // OCR Settings Methods
+        private void OCRSettings_Changed(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox checkBox && SettingsManager != null)
+            {
+                bool useMultiEngine = checkBox.IsChecked ?? false;
+                bool previousValue = SettingsManager.Settings.UseMultiEngineOCR;
+
+                // Only reinitialize if the value actually changed
+                if (previousValue != useMultiEngine)
+                {
+                    SettingsManager.Settings.UseMultiEngineOCR = useMultiEngine;
+                    SettingsManager.SaveSettings();
+
+                    Log.Information($"OCR mode changed to: {(useMultiEngine ? "Enhanced Accuracy (Multi-Engine)" : "Fast Processing (Single Engine)")}");
+
+                    // Only reinitialize if OCR processor is already initialized
+                    if (ocrProcessor != null)
+                    {
+                        // Show loading message in log area
+                        AppendLogMessage($"Reinitializing OCR engine for {(useMultiEngine ? "Enhanced Accuracy" : "Fast Processing")} mode...");
+
+                        // Disable scan button during reinitialization
+                        if (FindName("scanButton") is Button scanBtn)
+                        {
+                            scanBtn.IsEnabled = false;
+                        }
+
+                        // Reinitialize OCR in background
+                        Task.Run(() =>
+                        {
+                            try
+                            {
+                                // Dispose existing engines
+                                ocrProcessor.Dispose();
+
+                                // Reinitialize with new settings
+                                ocrProcessor = new OCRProcessor(
+                                    ServiceLocator.GetService<IImageProcessor>(),
+                                    ServiceLocator.GetService<IFileSystem>(),
+                                    SettingsManager
+                                );
+                                
+                                Dispatcher.InvokeAsync(() =>
+                                {
+                                    AppendLogMessage("OCR engine reinitialization complete.");
+                                    
+                                    // Re-enable scan button
+                                    if (FindName("scanButton") is Button scanBtn)
+                                    {
+                                        scanBtn.IsEnabled = true;
+                                    }
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Error(ex, "Error reinitializing OCR engine.");
+                                Dispatcher.InvokeAsync(() =>
+                                {
+                                    AppendLogMessage($"Error reinitializing OCR engine: {ex.Message}");
+                                    
+                                    // Re-enable scan button even on failure
+                                    if (FindName("scanButton") is Button scanBtn)
+                                    {
+                                        scanBtn.IsEnabled = true;
+                                    }
+                                });
+                            }
+                        });
+                    }
+                    else
+                    {
+                        // OCR processor not initialized yet, settings will be used when it is initialized
+                        Log.Information("OCR settings saved. Will be applied when OCR is initialized.");
+                        AppendLogMessage("OCR settings saved. Will be applied at next scan.");
+                    }
+                }
+            }
+            
+            if (sender is Slider slider && SettingsManager != null)
+            {
+                SettingsManager.Settings.OCRConfidenceThreshold = (float)slider.Value;
+                SettingsManager.SaveSettings();
+                Log.Information($"OCR confidence threshold set to: {slider.Value:P0}");
+            }
+        }
+
+        private void OCRConfidenceSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (SettingsManager != null)
+            {
+                SettingsManager.Settings.OCRConfidenceThreshold = (float)e.NewValue;
+                SettingsManager.SaveSettings();
+                Log.Debug($"OCR confidence threshold changed to: {e.NewValue}%");
             }
         }
 
