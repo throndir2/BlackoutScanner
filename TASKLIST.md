@@ -99,18 +99,17 @@
 - [x] App settings values in appdata are not reflected in the UI causing confusion
 
 ## Known Issues
-- [ ] Editing key fields results in duplicates data entries
+- [x] Editing key fields results in duplicates data entries
 
 ## Upcoming Features for v2.0
-- [ ] Multi-object scan (leaderboards)
+- [x] Multi-object scan (leaderboards)
 - [x] Autostop scan when modifying name/invalid OCR, and restart on Save click
 - [x] Hotkey to stop/start scan
 - [x] Configurable displayed time (local time option for exports)
 - [ ] Language configuration
-- [ ] OCR configuration: confidence threshhold, fallback, etc
+- [x] OCR configuration: confidence threshhold, fallback, etc
 - [ ] Move active profile txt file to use appsettings json instead
-- [ ] Fallback OCR must be a configurable option, default false, as it adds too much time with little gain
-- [ ] Configurable OCR Threshhold, anything below will be considered no detection
+- [x] Fallback OCR must be a configurable option, default false, as it adds too much time with little gain
 - [ ] Linking categories together (Chieftain page to More Info page)
 - [ ] Do a OCR scan after a user defines an area, so they have an idea of what is scanned. Eg, a new 'Preview Result' field.
 - [ ] Package to singular EXE

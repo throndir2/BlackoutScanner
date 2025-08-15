@@ -96,6 +96,8 @@ namespace BlackoutScanner.Services
             Rectangle gameWindowRect = screenCapture.GetClientRectangle(activeProfile.GameWindowTitle);
             if (gameWindowRect == Rectangle.Empty) return;
 
+            Log.Debug($"Scanner: Using gameWindowRect {gameWindowRect} for scanning");
+
             // Create a container rectangle for coordinate conversion
             var containerRect = new Rectangle(0, 0, gameWindowRect.Width, gameWindowRect.Height);
 
@@ -105,6 +107,8 @@ namespace BlackoutScanner.Services
                 {
                     // Convert relative bounds to absolute for this window size
                     var categoryAbsoluteBounds = category.RelativeBounds.ToAbsolute(containerRect);
+                    
+                    Log.Debug($"Scanner: Category '{category.Name}' relative bounds {category.RelativeBounds} converted to absolute {categoryAbsoluteBounds}");
 
                     // Check if this category matches based on its comparison mode
                     bool isCategoryMatch = false;
@@ -126,7 +130,9 @@ namespace BlackoutScanner.Services
                                 using (var ms = new System.IO.MemoryStream(category.PreviewImageData))
                                 using (var referenceImage = new Bitmap(ms))
                                 {
+                                    Log.Debug($"Scanner: Comparing category '{category.Name}' image with threshold {0.90:P2}");
                                     isCategoryMatch = CompareImages(categoryAreaBitmap, referenceImage);
+                                    Log.Debug($"Scanner: Category '{category.Name}' image match result: {isCategoryMatch}");
                                 }
                             }
                         }
@@ -330,13 +336,16 @@ namespace BlackoutScanner.Services
             }
         }
 
-        private bool CompareImages(Bitmap image1, Bitmap image2, double threshold = 0.95)
+        private bool CompareImages(Bitmap image1, Bitmap image2, double threshold = 0.90) // Lowered threshold to be more forgiving
         {
             try
             {
+                Log.Debug($"Original image dimensions - Current: {image1.Width}x{image1.Height}, Reference: {image2.Width}x{image2.Height}");
+                
                 // Resize images if they don't match dimensions
                 if (image1.Width != image2.Width || image1.Height != image2.Height)
                 {
+                    Log.Debug($"Resizing reference image from {image2.Width}x{image2.Height} to {image1.Width}x{image1.Height}");
                     using (var resized = new Bitmap(image2, image1.Width, image1.Height))
                     {
                         return CompareImagePixels(image1, resized, threshold);
@@ -357,6 +366,9 @@ namespace BlackoutScanner.Services
             int matchingPixels = 0;
             int totalPixels = image1.Width * image1.Height;
 
+            // Log dimensions to help diagnose scaling issues
+            Log.Debug($"Comparing images - Image1: {image1.Width}x{image1.Height}, Image2: {image2.Width}x{image2.Height}");
+            
             for (int x = 0; x < image1.Width; x++)
             {
                 for (int y = 0; y < image1.Height; y++)
@@ -375,7 +387,7 @@ namespace BlackoutScanner.Services
             }
 
             double similarity = (double)matchingPixels / totalPixels;
-            Log.Debug($"Image comparison similarity: {similarity:P2}");
+            Log.Debug($"Image comparison similarity: {similarity:P2} (threshold: {threshold:P2})");
             return similarity >= threshold;
         }
     }

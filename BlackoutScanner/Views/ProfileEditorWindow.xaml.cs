@@ -184,6 +184,9 @@ namespace BlackoutScanner.Views
                 return;
             }
 
+            // Log the game window rectangle
+            Log.Debug($"ProfileEditorWindow: DefineCategoryArea using gameWindowRect {gameWindowRect} for area selection");
+
             if (categoriesTabControl.SelectedItem is CaptureCategory selectedCategory)
             {
                 // Minimize the profile editor window temporarily
@@ -205,8 +208,11 @@ namespace BlackoutScanner.Views
                     Log.Debug($"Selection rectangle: {selectionInWindowCoordinates}");
 
                     // Store the relative bounds
-                    selectedCategory.RelativeBounds = RelativeBounds.FromAbsolute(selectionInWindowCoordinates, new Rectangle(0, 0, gameWindowRect.Width, gameWindowRect.Height));
+                    var containerRect = new Rectangle(0, 0, gameWindowRect.Width, gameWindowRect.Height);
+                    selectedCategory.RelativeBounds = RelativeBounds.FromAbsolute(selectionInWindowCoordinates, containerRect);
                     selectedCategory.Bounds = selectionInWindowCoordinates; // For UI display
+                    
+                    Log.Debug($"ProfileEditorWindow: Category '{selectedCategory.Name}' relative bounds set to {selectedCategory.RelativeBounds} from rectangle {selectionInWindowCoordinates} in container {containerRect}");
 
                     // Now capture just the selected area for preview
                     using (var gameWindowScreenshot = screenCapture.CaptureScreenArea(gameWindowRect))
@@ -295,6 +301,8 @@ namespace BlackoutScanner.Views
                 MessageBox.Show($"Could not find a window with the title '{gameTitle}'.\nPlease ensure the game is running and the title is correct.", "Window Not Found");
                 return;
             }
+            
+            Log.Debug($"ProfileEditorWindow: DefineFieldArea using gameWindowRect {gameWindowRect} for area selection");
 
             if (sender is Button button && button.Tag is CaptureField selectedField)
             {
@@ -319,9 +327,15 @@ namespace BlackoutScanner.Views
                 if (areaSelector.ShowDialog() == true)
                 {
                     var selectionInWindowCoordinates = areaSelector.SelectedRectangle;
+                    
+                    // Log the selection for debugging
+                    Log.Debug($"Field '{selectedField.Name}' selection rectangle: {selectionInWindowCoordinates}");
 
-                    selectedField.RelativeBounds = RelativeBounds.FromAbsolute(selectionInWindowCoordinates, new Rectangle(0, 0, gameWindowRect.Width, gameWindowRect.Height));
+                    var containerRect = new Rectangle(0, 0, gameWindowRect.Width, gameWindowRect.Height);
+                    selectedField.RelativeBounds = RelativeBounds.FromAbsolute(selectionInWindowCoordinates, containerRect);
                     selectedField.Bounds = selectionInWindowCoordinates; // For UI display
+                    
+                    Log.Debug($"ProfileEditorWindow: Field '{selectedField.Name}' relative bounds set to {selectedField.RelativeBounds} from rectangle {selectionInWindowCoordinates} in container {containerRect}");
 
                     // Now capture just the selected area for preview
                     using (var gameWindowScreenshot = screenCapture.CaptureScreenArea(gameWindowRect))
