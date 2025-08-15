@@ -3,8 +3,12 @@ name: .NET Core Desktop
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0, v2.0.4, etc.
   pull_request:
     branches: [ "main" ]
+  release:
+    types: [created]  # Trigger when a release is created
 
 jobs:
   build:
@@ -68,26 +72,28 @@ jobs:
         }
       shell: pwsh
 
-    # Upload the build artifacts
+    # Create a release zip
+    - name: Create Release Archive
+      run: |
+        $zipName = "BlackoutScanner-${{ matrix.configuration }}-x64.zip"
+        Compress-Archive -Path publish\${{ matrix.configuration }}\* -DestinationPath $zipName
+        Write-Host "Created archive: $zipName"
+      shell: pwsh
+
+    # Upload the build artifacts (for workflow artifacts)
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: BlackoutScanner-${{ matrix.configuration }}-${{ github.sha }}
-        path: publish\${{ matrix.configuration }}\*
+        path: BlackoutScanner-${{ matrix.configuration }}-x64.zip
         retention-days: 30
 
-    # Create a release zip (only for Release configuration)
-    - name: Create Release Archive
-      if: matrix.configuration == 'Release'
-      run: |
-        Compress-Archive -Path publish\Release\* -DestinationPath BlackoutScanner-Release.zip
-      shell: pwsh
-
-    # Upload release zip as artifact
-    - name: Upload Release Archive
-      if: matrix.configuration == 'Release'
-      uses: actions/upload-artifact@v4
+    # Upload Release Assets to GitHub Release (only on release/tag)
+    - name: Upload Release Asset
+      if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
       with:
-        name: BlackoutScanner-Release-Archive
-        path: BlackoutScanner-Release.zip
-        retention-days: 30
+        files: BlackoutScanner-${{ matrix.configuration }}-x64.zip
+        tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
