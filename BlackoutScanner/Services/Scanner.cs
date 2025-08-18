@@ -107,7 +107,7 @@ namespace BlackoutScanner.Services
                 {
                     // Convert relative bounds to absolute for this window size
                     var categoryAbsoluteBounds = category.RelativeBounds.ToAbsolute(containerRect);
-                    
+
                     Log.Debug($"Scanner: Category '{category.Name}' relative bounds {category.RelativeBounds} converted to absolute {categoryAbsoluteBounds}");
 
                     // Check if this category matches based on its comparison mode
@@ -164,11 +164,13 @@ namespace BlackoutScanner.Services
             var groupId = Guid.NewGuid();
             var scanTime = DateTime.UtcNow;
 
-            // Process each entity based on the configured max count
-            for (int entityIndex = 0; entityIndex < category.MaxEntityCount; entityIndex++)
+            // Use ConcurrentBag to safely collect results from parallel processing
+            var results = new System.Collections.Concurrent.ConcurrentBag<(int entityIndex, Dictionary<string, object> fields, bool hasValidData)>();
+
+            // Process entities in parallel
+            Parallel.For(0, category.MaxEntityCount, new ParallelOptions { MaxDegreeOfParallelism = 4 }, entityIndex =>
             {
                 var offsetY = entityIndex * category.EntityHeightOffset;
-                var dataRecord = new DataRecord();
                 var updatedFields = new Dictionary<string, object>();
                 bool hasValidData = false;
 
@@ -208,20 +210,32 @@ namespace BlackoutScanner.Services
                     }
                 }
 
-                // Only save the record if it contains valid data
-                if (hasValidData)
+                // Add the result to our concurrent collection
+                results.Add((entityIndex, updatedFields, hasValidData));
+            });
+
+            // Process results sequentially to ensure consistent data handling
+            foreach (var result in results.OrderBy(r => r.entityIndex))
+            {
+                if (result.hasValidData)
                 {
-                    dataRecord.Fields = new Dictionary<string, object>(updatedFields);
-                    dataRecord.ScanDate = scanTime;
-                    dataRecord.Category = category.Name;
-                    dataRecord.GameProfile = activeProfile.ProfileName;
-                    dataRecord.EntityIndex = entityIndex;
-                    dataRecord.GroupId = groupId;
+                    var dataRecord = new DataRecord
+                    {
+                        Fields = new Dictionary<string, object>(result.fields),
+                        ScanDate = scanTime,
+                        Category = category.Name,
+                        GameProfile = activeProfile.ProfileName,
+                        EntityIndex = result.entityIndex,
+                        GroupId = groupId
+                    };
 
                     // IMPORTANT: Include the category name in the data being sent
-                    updatedFields["__Category__"] = category.Name;
+                    var updateFields = new Dictionary<string, object>(result.fields)
+                    {
+                        ["__Category__"] = category.Name
+                    };
 
-                    DataUpdated?.Invoke(updatedFields);
+                    DataUpdated?.Invoke(updateFields);
                     ScanDateUpdated?.Invoke(dataRecord.ScanDate);
 
                     dataManager.AddOrUpdateRecord(dataRecord, activeProfile);
@@ -230,7 +244,7 @@ namespace BlackoutScanner.Services
                 {
                     // If we find an empty row, we might want to stop scanning
                     // This is optional based on requirements
-                    Log.Debug($"Entity {entityIndex} appears empty, continuing to next entity");
+                    Log.Debug($"Entity {result.entityIndex} appears empty, continuing to next entity");
                 }
             }
         }
@@ -310,23 +324,20 @@ namespace BlackoutScanner.Services
                 Log.Debug($"[Scanner.ProcessArea] Processing area for category='{category}', field='{fieldName}'");
                 Log.Debug($"[Scanner.ProcessArea] Current scanner settings: saveDebugImages={saveDebugImages}, verboseLogging={verboseLogging}");
 
-                lock (bitmapLock)
+                using (var croppedBitmap = gameWindowBitmap.Clone(area, gameWindowBitmap.PixelFormat))
                 {
-                    using (var croppedBitmap = gameWindowBitmap.Clone(area, gameWindowBitmap.PixelFormat))
-                    {
-                        // Use the extended method with debug parameters
-                        Log.Debug($"[Scanner.ProcessArea] Calling ProcessImageWithFallback with saveDebugImages={saveDebugImages}");
+                    // Use the extended method with debug parameters
+                    Log.Debug($"[Scanner.ProcessArea] Calling ProcessImageWithFallback with saveDebugImages={saveDebugImages}");
 
-                        return ocrProcessor.ProcessImageWithFallback(
-                            croppedBitmap,
-                            0,
-                            numericalOnly,
-                            saveDebugImages,
-                            debugImagesFolder,
-                            verboseLogging,
-                            category,
-                            fieldName);
-                    }
+                    return ocrProcessor.ProcessImageWithFallback(
+                        croppedBitmap,
+                        0,
+                        numericalOnly,
+                        saveDebugImages,
+                        debugImagesFolder,
+                        verboseLogging,
+                        category,
+                        fieldName);
                 }
             }
             catch (Exception ex)
@@ -341,7 +352,7 @@ namespace BlackoutScanner.Services
             try
             {
                 Log.Debug($"Original image dimensions - Current: {image1.Width}x{image1.Height}, Reference: {image2.Width}x{image2.Height}");
-                
+
                 // Resize images if they don't match dimensions
                 if (image1.Width != image2.Width || image1.Height != image2.Height)
                 {
@@ -368,7 +379,7 @@ namespace BlackoutScanner.Services
 
             // Log dimensions to help diagnose scaling issues
             Log.Debug($"Comparing images - Image1: {image1.Width}x{image1.Height}, Image2: {image2.Width}x{image2.Height}");
-            
+
             for (int x = 0; x < image1.Width; x++)
             {
                 for (int y = 0; y < image1.Height; y++)

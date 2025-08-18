@@ -9,10 +9,10 @@
     <ApplicationIcon>Assets\Images\Icon.512.ico</ApplicationIcon>
     
     <!-- Version Information -->
-    <AssemblyVersion>2.0.4.0</AssemblyVersion>
-    <FileVersion>2.0.4.0</FileVersion>
-    <ProductVersion>2.0.4</ProductVersion>
-    <Version>2.0.4</Version>
+    <AssemblyVersion>2.0.5.0</AssemblyVersion>
+    <FileVersion>2.0.5.0</FileVersion>
+    <ProductVersion>2.0.5</ProductVersion>
+    <Version>2.0.5</Version>
     
     <!-- Additional Assembly Information -->
     <AssemblyTitle>Blackout Scanner</AssemblyTitle>

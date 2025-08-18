@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -14,6 +15,7 @@ namespace BlackoutScanner.Models
         private bool _useLocalTimeInExports = false;
         private bool _useMultiEngineOCR = false;
         private float _ocrConfidenceThreshold = 80.0f;
+        private List<string> _selectedLanguages = new List<string> { "eng", "kor", "jpn", "chi_sim", "chi_tra", "rus" };
 
         public string ExportFolder
         {
@@ -114,6 +116,19 @@ namespace BlackoutScanner.Models
                 if (_ocrConfidenceThreshold != value)
                 {
                     _ocrConfidenceThreshold = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public List<string> SelectedLanguages
+        {
+            get => _selectedLanguages;
+            set
+            {
+                if (_selectedLanguages != value)
+                {
+                    _selectedLanguages = value;
                     OnPropertyChanged();
                 }
             }

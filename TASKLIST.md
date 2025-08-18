@@ -117,3 +117,4 @@
 - [ ] Submit file to Microsoft security
 - [ ] Include validation when defining an area, with "Category name does not equal <text found>" warning
 - [ ] Category scanning optional requirement for pixel color
+- [ ] Track the Confidence level of each entry, for low confidence, we pass those to OpenAI for a more accurate OCR using a LLM

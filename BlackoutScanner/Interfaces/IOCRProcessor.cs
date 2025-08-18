@@ -19,5 +19,6 @@ namespace BlackoutScanner.Interfaces
         void SaveDebugImage(Bitmap bitmap, string category, string fieldName);
         string GenerateImageHash(BitmapImage bitmapImage);
         BitmapImage ConvertBitmapToBitmapImage(System.Drawing.Bitmap bitmap);
+        void UpdateLanguages(List<string> languages);
     }
 }

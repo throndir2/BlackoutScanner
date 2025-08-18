@@ -75,6 +75,7 @@ namespace BlackoutScanner.Views
         private const string tessdataDirectory = "tessdata";
         private readonly string[] SupportedLanguages = { "eng", "kor", "jpn", "chi_sim", "chi_tra" };
         private readonly string cacheFilePath = "ocrCache.json";
+        private Dictionary<string, List<LanguageInfo>>? _languagesByScript;
 
         private Dictionary<string, TextBox> fieldTextBoxes = new Dictionary<string, TextBox>();
         private Dictionary<string, WinImage> fieldImages = new Dictionary<string, WinImage>();
@@ -208,6 +209,9 @@ namespace BlackoutScanner.Views
 
                 // Load debug settings from SettingsManager instead
                 LoadDebugSettingsFromManager();
+
+                // Initialize language selection
+                InitializeLanguageSelection();
 
                 // Schedule a verification for when UI is fully loaded
                 Dispatcher.BeginInvoke(new Action(() =>
@@ -614,37 +618,42 @@ namespace BlackoutScanner.Views
             });
         }
 
-        private void LoadDataForCategory(DataGrid dataGrid, string categoryName)
+        private void LoadDataForCategory(DataGrid dataGrid, string categoryName, bool reloadAll = true)
         {
             // Create or get existing ObservableCollection for this category
             if (!categoryCollections.TryGetValue(categoryName, out var collection))
             {
                 collection = new ObservableCollection<DataRecord>();
                 categoryCollections[categoryName] = collection;
-            }
-            else
-            {
-                // Clear existing data but keep the same collection instance
-                collection.Clear();
+                reloadAll = true; // Force reload if collection didn't exist
             }
 
-            if (dataManager != null)
+            if (reloadAll && dataManager != null)
             {
-                // Filter and add data records to the collection
-                var categoryRecords = dataManager.DataRecordDictionary.Values
+                // Use a temporary list for better performance when loading many items
+                var tempList = dataManager.DataRecordDictionary.Values
                     .Where(r => r.Category == categoryName)
-                    .OrderByDescending(r => r.ScanDate);
+                    .OrderByDescending(r => r.ScanDate)
+                    .ToList();
 
-                foreach (var record in categoryRecords)
+                // Use batch update to minimize UI updates
+                collection.Clear();
+
+                foreach (var record in tempList)
                 {
                     collection.Add(record);
                 }
+
+                Log.Debug($"Reloaded {tempList.Count} records for category {categoryName}");
             }
 
-            // Set the ItemsSource to our ObservableCollection
-            dataGrid.ItemsSource = collection;
+            // Set the ItemsSource to our ObservableCollection - only needed on first load
+            if (dataGrid.ItemsSource != collection)
+            {
+                dataGrid.ItemsSource = collection;
+            }
 
-            // Schedule column auto-sizing with throttling
+            // Schedule column auto-sizing with throttling - but only if needed
             if (!dataGridsToResize.Contains(dataGrid))
             {
                 dataGridsToResize.Add(dataGrid);
@@ -677,7 +686,7 @@ namespace BlackoutScanner.Views
                         // Refresh the grid
                         if (dataGrid.Tag is string categoryName)
                         {
-                            LoadDataForCategory(dataGrid, categoryName);
+                            LoadDataForCategory(dataGrid, categoryName, true);
                         }
 
                         AppendLogMessage($"Record deleted: {hash}");
@@ -1044,12 +1053,41 @@ namespace BlackoutScanner.Views
 
         private void HandleDataUpdated(Dictionary<string, object> data)
         {
-            Dispatcher.Invoke(() =>
+            // Process category detection outside UI thread
+            string? detectedCategory = null;
+            if (data.TryGetValue("__Category__", out var categoryObj) && categoryObj is string categoryName)
+            {
+                detectedCategory = categoryName;
+                // Remove the special key so it doesn't get stored as a field
+                data.Remove("__Category__");
+            }
+
+            // Process data record creation outside UI thread
+            DataRecord? tempRecord = null;
+            string? newHash = null;
+
+            if (GameProfileManager?.ActiveProfile != null && dataManager != null && !string.IsNullOrEmpty(detectedCategory))
+            {
+                // Create temporary DataRecord
+                tempRecord = new DataRecord
+                {
+                    Fields = new Dictionary<string, object>(data),
+                    ScanDate = DateTime.UtcNow,
+                    GameProfile = GameProfileManager.ActiveProfile.ProfileName,
+                    Category = detectedCategory
+                };
+
+                // Generate hash for the new data
+                newHash = dataManager.GenerateDataHash(tempRecord, GameProfileManager.ActiveProfile);
+
+                // Add or update the record in the data manager (not UI related)
+                dataManager.AddOrUpdateRecord(tempRecord, GameProfileManager.ActiveProfile);
+            }
+
+            Dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
             {
                 try
                 {
-                    Log.Debug($"[HandleDataUpdated] START - currentRecordHash before update: {currentRecordHash ?? "null"}");
-
                     // Show update indicator
                     if (FindName("dataUpdateIndicator") is TextBlock dataUpdateIndicator)
                     {
@@ -1058,157 +1096,17 @@ namespace BlackoutScanner.Views
                         dataUpdateIndicator.Foreground = new SolidColorBrush(Colors.Orange);
                     }
 
-                    if (GameProfileManager?.ActiveProfile != null && dataManager != null)
+                    // Update hash for UI interaction
+                    if (newHash != null)
                     {
-                        // Extract the category from the special key if present
-                        string? detectedCategory = null;
-                        if (data.TryGetValue("__Category__", out var categoryObj) && categoryObj is string categoryName)
-                        {
-                            detectedCategory = categoryName;
-                            // Remove the special key so it doesn't get stored as a field
-                            data.Remove("__Category__");
-                            Log.Debug($"[HandleDataUpdated] Extracted category '{detectedCategory}' from data");
-                        }
-
-                        // Create temporary DataRecord to get category info
-                        var tempRecord = new DataRecord
-                        {
-                            Fields = new Dictionary<string, object>(data),
-                            ScanDate = DateTime.UtcNow,
-                            GameProfile = GameProfileManager.ActiveProfile.ProfileName,
-                            Category = detectedCategory ?? string.Empty // Use the detected category
-                        };
-
-                        // If category wasn't provided or is empty, try to detect it from fields (fallback)
-                        if (string.IsNullOrEmpty(detectedCategory))
-                        {
-                            Log.Warning($"[HandleDataUpdated] No category provided in data, attempting to detect from fields");
-                            foreach (var category in GameProfileManager.ActiveProfile.Categories)
-                            {
-                                // Check if all fields from this category are present in the data
-                                bool allFieldsMatch = category.Fields.All(field =>
-                                    data.ContainsKey(field.Name));
-
-                                if (allFieldsMatch && category.Fields.Count > 0)
-                                {
-                                    detectedCategory = category.Name;
-                                    tempRecord.Category = detectedCategory;
-                                    Log.Debug($"[HandleDataUpdated] Detected category '{detectedCategory}' from fields");
-                                    break;
-                                }
-                            }
-                        }
-
-                        // Generate hash for the new data
-                        var newHash = dataManager.GenerateDataHash(tempRecord, GameProfileManager.ActiveProfile);
-
-                        // IMPORTANT: Always update currentRecordHash, even when fields are being edited
-                        // This ensures SaveField_Click has the correct hash to work with
                         var previousHash = currentRecordHash;
                         currentRecordHash = newHash;
-                        Log.Information($"[HandleDataUpdated] Updated currentRecordHash from '{previousHash ?? "null"}' to '{newHash}'");
+                    }
 
-                        // Log if we have fields being edited
-                        if (fieldsBeingEdited.Count > 0)
-                        {
-                            Log.Debug($"[HandleDataUpdated] Fields currently being edited: {string.Join(", ", fieldsBeingEdited)}");
-                        }
-
-                        if (!string.IsNullOrEmpty(detectedCategory))
-                        {
-                            tempRecord.Category = detectedCategory;
-
-                            // Add or update the record
-                            dataManager.AddOrUpdateRecord(tempRecord, GameProfileManager.ActiveProfile);
-
-                            // Update the ObservableCollection for real-time UI updates
-                            if (categoryCollections.TryGetValue(detectedCategory, out var collection))
-                            {
-                                var hash = dataManager.GenerateDataHash(tempRecord, GameProfileManager.ActiveProfile);
-
-                                // Find existing record in the collection
-                                var existingRecord = collection.FirstOrDefault(r =>
-                                    dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == hash);
-
-                                if (existingRecord != null)
-                                {
-                                    // Update existing record - copy all fields
-                                    foreach (var field in tempRecord.Fields)
-                                    {
-                                        existingRecord.Fields[field.Key] = field.Value;
-                                    }
-                                    existingRecord.ScanDate = tempRecord.ScanDate;
-
-                                    // Force UI refresh by removing and re-adding
-                                    var index = collection.IndexOf(existingRecord);
-                                    collection.RemoveAt(index);
-                                    collection.Insert(index, existingRecord);
-                                }
-                                else
-                                {
-                                    // Add new record to the collection
-                                    collection.Insert(0, tempRecord);
-                                }
-
-                                // Mark as having unsaved changes
-                                dataManager.MarkAsUnsaved();
-                                UpdateUnsavedIndicator();
-
-                                // Find the DataGrid for this category to schedule auto-sizing
-                                if (FindName("dataTabControl") is TabControl dataTabControl)
-                                {
-                                    // Check if we're already on the correct tab
-                                    bool alreadyOnCorrectTab = false;
-                                    if (dataTabControl.SelectedItem is TabItem currentTab &&
-                                        currentTab.Header?.ToString() == detectedCategory)
-                                    {
-                                        alreadyOnCorrectTab = true;
-                                        // We're already on the correct tab, still need to get the DataGrid for resizing
-                                        if (currentTab.Content is DataGrid dataGrid)
-                                        {
-                                            // Schedule a throttled resize
-                                            if (!dataGridsToResize.Contains(dataGrid))
-                                            {
-                                                dataGridsToResize.Add(dataGrid);
-                                                if (!autoSizeTimer.IsEnabled)
-                                                {
-                                                    autoSizeTimer.Start();
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // If not on the correct tab, find and switch to it
-                                    if (!alreadyOnCorrectTab)
-                                    {
-                                        foreach (TabItem tab in dataTabControl.Items)
-                                        {
-                                            if (tab.Header?.ToString() == detectedCategory)
-                                            {
-                                                dataTabControl.SelectedItem = tab;
-                                                Log.Information($"Switched to data tab: {detectedCategory}");
-
-                                                if (tab.Content is DataGrid dataGrid)
-                                                {
-                                                    // Schedule a throttled resize
-                                                    if (!dataGridsToResize.Contains(dataGrid))
-                                                    {
-                                                        dataGridsToResize.Add(dataGrid);
-                                                        if (!autoSizeTimer.IsEnabled)
-                                                        {
-                                                            autoSizeTimer.Start();
-                                                        }
-                                                    }
-                                                }
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // currentRecordHash is already set at the beginning of this method
+                    // Update UI for the specific record if needed
+                    if (tempRecord != null && !string.IsNullOrEmpty(detectedCategory) && newHash != null)
+                    {
+                        UpdateSingleRecordInCollection(tempRecord, detectedCategory, newHash);
                     }
 
                     // Update field text boxes with the new data - but skip fields being edited
@@ -1217,7 +1115,6 @@ namespace BlackoutScanner.Views
                         // Skip updating fields that are currently being edited
                         if (fieldsBeingEdited.Contains(kvp.Key))
                         {
-                            Log.Debug($"Skipping update for field '{kvp.Key}' - currently being edited");
                             continue;
                         }
 
@@ -1230,11 +1127,6 @@ namespace BlackoutScanner.Views
                             {
                                 textBox.Text = newValue;
                                 lastFieldValues[kvp.Key] = newValue;
-                                Log.Debug($"Updated field '{kvp.Key}' with new value: {newValue}");
-                            }
-                            else
-                            {
-                                Log.Debug($"Skipping update for field '{kvp.Key}' - value unchanged");
                             }
                         }
                     }
@@ -1244,22 +1136,18 @@ namespace BlackoutScanner.Views
                     timer.Interval = TimeSpan.FromSeconds(1);
                     timer.Tick += (s, e) =>
                     {
-                        if (FindName("dataUpdateIndicator") is TextBlock dataUpdateIndicator)
+                        if (FindName("dataUpdateIndicator") is TextBlock indicator)
                         {
-                            dataUpdateIndicator.Text = "● Live";
-                            dataUpdateIndicator.Foreground = new SolidColorBrush(Colors.Green);
+                            indicator.Text = "● Live";
+                            indicator.Foreground = new SolidColorBrush(Colors.Green);
                         }
                         timer.Stop();
                     };
                     timer.Start();
-
-                    // Log final state of currentRecordHash at end of method
-                    Log.Debug($"[HandleDataUpdated] END - currentRecordHash final value: {currentRecordHash ?? "null"}");
                 }
                 catch (Exception ex)
                 {
                     Log.Error(ex, "Error updating data in UI");
-                    Log.Debug($"[HandleDataUpdated] ERROR - currentRecordHash at error: {currentRecordHash ?? "null"}");
 
                     // Update indicator to show error
                     if (FindName("dataUpdateIndicator") is TextBlock errorIndicator)
@@ -1268,7 +1156,95 @@ namespace BlackoutScanner.Views
                         errorIndicator.Foreground = new SolidColorBrush(Colors.Red);
                     }
                 }
-            });
+            }));
+        }
+
+        private void UpdateSingleRecordInCollection(DataRecord record, string categoryName, string hash)
+        {
+            if (GameProfileManager?.ActiveProfile == null || dataManager == null)
+                return;
+
+            if (categoryCollections.TryGetValue(categoryName, out var collection))
+            {
+                // Find existing record in the collection
+                var existingRecord = collection.FirstOrDefault(r =>
+                    dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == hash);
+
+                if (existingRecord != null)
+                {
+                    // Update existing record - copy all fields
+                    foreach (var field in record.Fields)
+                    {
+                        existingRecord.Fields[field.Key] = field.Value;
+                    }
+                    existingRecord.ScanDate = record.ScanDate;
+
+                    // Force UI refresh by removing and re-adding
+                    var index = collection.IndexOf(existingRecord);
+                    collection.RemoveAt(index);
+                    collection.Insert(index, existingRecord);
+                }
+                else
+                {
+                    // Add new record to the collection
+                    collection.Insert(0, record);
+                }
+
+                // Mark as having unsaved changes
+                dataManager.MarkAsUnsaved();
+                UpdateUnsavedIndicator();
+
+                // Find the DataGrid for this category to schedule auto-sizing
+                if (FindName("dataTabControl") is TabControl dataTabControl)
+                {
+                    // Check if we're already on the correct tab
+                    bool alreadyOnCorrectTab = false;
+                    if (dataTabControl.SelectedItem is TabItem currentTab &&
+                        currentTab.Header?.ToString() == categoryName)
+                    {
+                        alreadyOnCorrectTab = true;
+                        // We're already on the correct tab, still need to get the DataGrid for resizing
+                        if (currentTab.Content is DataGrid dataGrid)
+                        {
+                            // Schedule a throttled resize
+                            if (!dataGridsToResize.Contains(dataGrid))
+                            {
+                                dataGridsToResize.Add(dataGrid);
+                                if (!autoSizeTimer.IsEnabled)
+                                {
+                                    autoSizeTimer.Start();
+                                }
+                            }
+                        }
+                    }
+
+                    // If not on the correct tab, find and switch to it
+                    if (!alreadyOnCorrectTab)
+                    {
+                        foreach (TabItem tab in dataTabControl.Items)
+                        {
+                            if (tab.Header?.ToString() == categoryName)
+                            {
+                                dataTabControl.SelectedItem = tab;
+
+                                if (tab.Content is DataGrid dataGrid)
+                                {
+                                    // Schedule a throttled resize
+                                    if (!dataGridsToResize.Contains(dataGrid))
+                                    {
+                                        dataGridsToResize.Add(dataGrid);
+                                        if (!autoSizeTimer.IsEnabled)
+                                        {
+                                            autoSizeTimer.Start();
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         private void HandleImageUpdated(string fieldName, BitmapImage image)
@@ -2582,6 +2558,125 @@ namespace BlackoutScanner.Views
                 SettingsManager.Settings.OCRConfidenceThreshold = (float)e.NewValue;
                 SettingsManager.SaveSettings();
                 Log.Debug($"OCR confidence threshold changed to: {e.NewValue}%");
+            }
+        }
+
+        private void InitializeLanguageSelection()
+        {
+            if (SettingsManager == null) return;
+
+            // Get languages grouped by script
+            _languagesByScript = LanguageHelper.GetLanguagesByScript();
+
+            // Set IsSelected based on current settings
+            var selectedLanguages = SettingsManager.Settings.SelectedLanguages;
+            foreach (var scriptGroup in _languagesByScript.Values)
+            {
+                foreach (var lang in scriptGroup)
+                {
+                    lang.IsSelected = selectedLanguages.Contains(lang.Code);
+                }
+            }
+
+            // Bind to UI
+            Dispatcher.Invoke(() =>
+            {
+                if (FindName("languagesList") is ItemsControl languagesList)
+                {
+                    languagesList.ItemsSource = _languagesByScript;
+                }
+            });
+        }
+
+        private async void LanguageCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox checkBox && checkBox.Tag is string languageCode && SettingsManager != null)
+            {
+                var isChecked = checkBox.IsChecked == true;
+
+                // Get current selected languages
+                var selectedLanguages = new List<string>();
+                if (_languagesByScript != null)
+                {
+                    foreach (var scriptGroup in _languagesByScript.Values)
+                    {
+                        foreach (var lang in scriptGroup.Where(l => l.IsSelected))
+                        {
+                            selectedLanguages.Add(lang.Code);
+                        }
+                    }
+                }
+
+                // Validate at least one language is selected
+                if (!isChecked && selectedLanguages.Count == 1 && selectedLanguages[0] == languageCode)
+                {
+                    MessageBox.Show("At least one language must be selected.", "Validation",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    checkBox.IsChecked = true;
+                    return;
+                }
+
+                // Update the language info
+                LanguageInfo? langInfo = null;
+                if (_languagesByScript != null)
+                {
+                    langInfo = _languagesByScript.Values
+                        .SelectMany(v => v)
+                        .FirstOrDefault(l => l.Code == languageCode);
+                }
+
+                if (langInfo != null)
+                {
+                    langInfo.IsSelected = isChecked;
+
+                    // Show loading indicator
+                    var originalContent = checkBox.Content;
+                    checkBox.IsEnabled = false;
+                    checkBox.Content = isChecked ? "Initializing..." : "Removing...";
+
+                    try
+                    {
+                        // Update selected languages in settings
+                        selectedLanguages = new List<string>();
+                        if (_languagesByScript != null)
+                        {
+                            foreach (var scriptGroup in _languagesByScript.Values)
+                            {
+                                foreach (var lang in scriptGroup.Where(l => l.IsSelected))
+                                {
+                                    selectedLanguages.Add(lang.Code);
+                                }
+                            }
+                        }
+
+                        SettingsManager.Settings.SelectedLanguages = selectedLanguages;
+                        SettingsManager.SaveSettings();
+
+                        // Update OCR processor in background
+                        await Task.Run(() =>
+                        {
+                            ocrProcessor?.UpdateLanguages(selectedLanguages);
+                        });
+
+                        Log.Information($"Language {languageCode} {(isChecked ? "added" : "removed")}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, $"Failed to {(isChecked ? "add" : "remove")} language {languageCode}");
+                        MessageBox.Show($"Failed to update language: {ex.Message}", "Error",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+
+                        // Revert the change
+                        langInfo.IsSelected = !isChecked;
+                        checkBox.IsChecked = !isChecked;
+                    }
+                    finally
+                    {
+                        // Restore UI
+                        checkBox.Content = originalContent;
+                        checkBox.IsEnabled = true;
+                    }
+                }
             }
         }
 

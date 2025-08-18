@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using Serilog;
 using System.IO;
 using System.Text;
+using System.Collections.Concurrent;
 
 namespace BlackoutScanner
 {
@@ -14,6 +15,7 @@ namespace BlackoutScanner
         private readonly string jsonFilePath;
         private readonly string invalidJsonFilePath;
         private bool hasUnsavedChanges = false;
+        private readonly ConcurrentDictionary<string, string> _hashCache = new ConcurrentDictionary<string, string>();
 
         public Dictionary<string, DataRecord> DataRecordDictionary { get; private set; } = new Dictionary<string, DataRecord>();
 
@@ -349,30 +351,17 @@ namespace BlackoutScanner
                     return string.Empty;
                 }
 
-                // Build the hash from key field values
+                // Build a cache key from key field values
                 var hashParts = new List<string>();
-
                 foreach (var keyFieldName in categoryKeyFields)
                 {
                     if (record.Fields.TryGetValue(keyFieldName, out var value))
                     {
-                        // Convert the value to string for hashing
                         var stringValue = value?.ToString() ?? "";
-
-                        // Only add non-empty values to the hash
                         if (!string.IsNullOrWhiteSpace(stringValue))
                         {
                             hashParts.Add($"{keyFieldName}:{stringValue}");
-                            Log.Debug($"Adding key field to hash: {keyFieldName} = {stringValue}");
                         }
-                        else
-                        {
-                            Log.Debug($"Key field '{keyFieldName}' has empty value, skipping from hash");
-                        }
-                    }
-                    else
-                    {
-                        Log.Debug($"Key field '{keyFieldName}' not found in record fields");
                     }
                 }
 
@@ -383,16 +372,25 @@ namespace BlackoutScanner
                     return string.Empty;
                 }
 
-                // Create a deterministic hash
-                var combinedString = string.Join("|", hashParts.OrderBy(x => x)); // Sort for consistency
-                combinedString = $"{profile.ProfileName}|{record.Category}|{combinedString}";
+                // Create a cache key
+                var cacheKey = $"{profile.ProfileName}|{record.Category}|{string.Join("|", hashParts.OrderBy(x => x))}";
 
+                // Check if we already have a hash for this key
+                if (_hashCache.TryGetValue(cacheKey, out var cachedHash))
+                {
+                    return cachedHash;
+                }
+
+                // Create a deterministic hash
                 using (var sha256 = System.Security.Cryptography.SHA256.Create())
                 {
-                    var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(combinedString));
+                    var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(cacheKey));
                     var hash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
 
-                    Log.Debug($"Generated hash: {hash} from: {combinedString}");
+                    // Cache the result
+                    _hashCache[cacheKey] = hash;
+
+                    Log.Debug($"Generated hash: {hash} from: {cacheKey}");
                     return hash;
                 }
             }

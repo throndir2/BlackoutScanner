@@ -1,6 +1,29 @@
 ```markdown
 # Blackout Scanner Changelog
 
+## [2.0.5] - 2025-08-18
+
+### Added
+- Configurable language support in the Configuration tab
+- Dynamic language engine management for OCR processing
+- Support for 20+ languages organized by script type
+- Smart language engine instantiation to optimize memory usage
+- Improved Configuration tab with collapsible sections for better organization
+- Dynamic profile list height based on content
+- Consistent styling for expanded/collapsed sections
+- Streamlined scrolling behavior in the Configuration tab
+- Added Russian as default languages.
+
+### Fixed
+- Fixed critical OCR error "Value cannot be null. (Parameter 'encoder')" by using explicit PNG format for bitmap processing
+- Improved memory management with proper bitmap disposal to prevent memory leaks
+- Enhanced OCR performance with optimized bitmap handling
+- Ensured consistent image data caching for UI display in all processing paths
+- Fixed duplicate method definitions in OCRProcessor.cs
+- Fixed potential null reference issues in language selection handling
+- Eliminated nested scrollbars in OCR language selection area
+- Enhanced theme consistency in collapsible UI elements
+
 ## [2.0.4] - 2025-08-12
 
 ### Added

@@ -649,4 +649,117 @@
                         </Setter.Value>
                 </Setter>
         </Style>
+
+        <!-- Expander Style -->
+        <Style TargetType="Expander">
+                <Setter Property="Background"
+                        Value="{StaticResource BackgroundBrush}"/>
+                <Setter Property="Foreground"
+                        Value="{StaticResource ForegroundBrush}"/>
+                <Setter Property="BorderBrush"
+                        Value="{StaticResource BorderBrush}"/>
+                <Setter Property="BorderThickness"
+                        Value="1"/>
+                <Setter Property="Template">
+                        <Setter.Value>
+                                <ControlTemplate TargetType="Expander">
+                                        <Border BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                Background="{StaticResource BackgroundBrush}"
+                                                CornerRadius="3">
+                                                <Grid>
+                                                        <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Name="ContentRow"
+                                                                               Height="0"/>
+                                                        </Grid.RowDefinitions>
+
+                                                        <!-- Header -->
+                                                        <Border Name="HeaderBorder"
+                                                                Grid.Row="0"
+                                                                Background="{StaticResource BackgroundBrush}"
+                                                                CornerRadius="3,3,0,0">
+                                                                <ToggleButton x:Name="HeaderButton"
+                                                                              IsChecked="{Binding Path=IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                                                              Background="Transparent"
+                                                                              BorderThickness="0"
+                                                                              Padding="10,8"
+                                                                              HorizontalContentAlignment="Stretch">
+                                                                        <ToggleButton.Template>
+                                                                                <ControlTemplate TargetType="ToggleButton">
+                                                                                        <Border Background="{TemplateBinding Background}"
+                                                                                                Padding="{TemplateBinding Padding}">
+                                                                                                <Grid>
+                                                                                                        <Grid.ColumnDefinitions>
+                                                                                                                <ColumnDefinition Width="Auto"/>
+                                                                                                                <ColumnDefinition Width="*"/>
+                                                                                                        </Grid.ColumnDefinitions>
+                                                                                                        <Path x:Name="Arrow"
+                                                                                                              Grid.Column="0"
+                                                                                                              HorizontalAlignment="Center"
+                                                                                                              VerticalAlignment="Center"
+                                                                                                              Data="M 0 0 L 4 4 L 0 8 Z"
+                                                                                                              Fill="{StaticResource ForegroundBrush}"
+                                                                                                              Margin="0,0,8,0">
+                                                                                                                <Path.RenderTransform>
+                                                                                                                        <RotateTransform Angle="0"
+                                                                                                                                         CenterX="2"
+                                                                                                                                         CenterY="4"/>
+                                                                                                                </Path.RenderTransform>
+                                                                                                        </Path>
+                                                                                                        <ContentPresenter Grid.Column="1"
+                                                                                                                          HorizontalAlignment="Left"
+                                                                                                                          VerticalAlignment="Center"/>
+                                                                                                </Grid>
+                                                                                        </Border>
+                                                                                        <ControlTemplate.Triggers>
+                                                                                                <Trigger Property="IsChecked"
+                                                                                                         Value="True">
+                                                                                                        <Setter TargetName="Arrow"
+                                                                                                                Property="RenderTransform">
+                                                                                                                <Setter.Value>
+                                                                                                                        <RotateTransform Angle="90"
+                                                                                                                                         CenterX="2"
+                                                                                                                                         CenterY="4"/>
+                                                                                                                </Setter.Value>
+                                                                                                        </Setter>
+                                                                                                </Trigger>
+                                                                                                <Trigger Property="IsMouseOver"
+                                                                                                         Value="True">
+                                                                                                        <Setter Property="Background"
+                                                                                                                Value="{StaticResource ButtonHoverBackgroundBrush}"/>
+                                                                                                </Trigger>
+                                                                                        </ControlTemplate.Triggers>
+                                                                                </ControlTemplate>
+                                                                        </ToggleButton.Template>
+                                                                        <ContentPresenter ContentSource="Header"
+                                                                                          RecognizesAccessKey="True"
+                                                                                          TextBlock.FontWeight="Bold"/>
+                                                                </ToggleButton>
+                                                        </Border>
+
+                                                        <!-- Content -->
+                                                        <Border Name="ContentBorder"
+                                                                Grid.Row="1"
+                                                                Background="{StaticResource BackgroundBrush}"
+                                                                BorderBrush="{StaticResource BorderBrush}"
+                                                                BorderThickness="0,1,0,0"
+                                                                CornerRadius="0,0,3,3">
+                                                                <ContentPresenter x:Name="ContentPresenter"
+                                                                                  Margin="5"/>
+                                                        </Border>
+                                                </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                                <Trigger Property="IsExpanded"
+                                                         Value="True">
+                                                        <Setter TargetName="ContentRow"
+                                                                Property="Height"
+                                                                Value="Auto"/>
+                                                </Trigger>
+                                        </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                        </Setter.Value>
+                </Setter>
+        </Style>
 </ResourceDictionary>

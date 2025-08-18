@@ -211,7 +211,7 @@ namespace BlackoutScanner.Views
                     var containerRect = new Rectangle(0, 0, gameWindowRect.Width, gameWindowRect.Height);
                     selectedCategory.RelativeBounds = RelativeBounds.FromAbsolute(selectionInWindowCoordinates, containerRect);
                     selectedCategory.Bounds = selectionInWindowCoordinates; // For UI display
-                    
+
                     Log.Debug($"ProfileEditorWindow: Category '{selectedCategory.Name}' relative bounds set to {selectedCategory.RelativeBounds} from rectangle {selectionInWindowCoordinates} in container {containerRect}");
 
                     // Now capture just the selected area for preview
@@ -301,7 +301,7 @@ namespace BlackoutScanner.Views
                 MessageBox.Show($"Could not find a window with the title '{gameTitle}'.\nPlease ensure the game is running and the title is correct.", "Window Not Found");
                 return;
             }
-            
+
             Log.Debug($"ProfileEditorWindow: DefineFieldArea using gameWindowRect {gameWindowRect} for area selection");
 
             if (sender is Button button && button.Tag is CaptureField selectedField)
@@ -327,14 +327,14 @@ namespace BlackoutScanner.Views
                 if (areaSelector.ShowDialog() == true)
                 {
                     var selectionInWindowCoordinates = areaSelector.SelectedRectangle;
-                    
+
                     // Log the selection for debugging
                     Log.Debug($"Field '{selectedField.Name}' selection rectangle: {selectionInWindowCoordinates}");
 
                     var containerRect = new Rectangle(0, 0, gameWindowRect.Width, gameWindowRect.Height);
                     selectedField.RelativeBounds = RelativeBounds.FromAbsolute(selectionInWindowCoordinates, containerRect);
                     selectedField.Bounds = selectionInWindowCoordinates; // For UI display
-                    
+
                     Log.Debug($"ProfileEditorWindow: Field '{selectedField.Name}' relative bounds set to {selectedField.RelativeBounds} from rectangle {selectionInWindowCoordinates} in container {containerRect}");
 
                     // Now capture just the selected area for preview

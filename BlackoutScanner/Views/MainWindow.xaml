@@ -112,12 +112,8 @@
                         <TabItem Header="Configuration">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                                               HorizontalScrollBarVisibility="Disabled">
-                                        <Grid Margin="10"
-                                              MinHeight="400">
+                                        <Grid Margin="10">
                                                 <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="*"
-                                                                       MinHeight="200"/>
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
@@ -125,92 +121,101 @@
                                                         <RowDefinition Height="Auto"/>
                                                 </Grid.RowDefinitions>
 
-                                                <!-- Game Profiles Section -->
-                                                <TextBlock Grid.Row="0"
-                                                           Text="Game Profiles"
-                                                           FontWeight="Bold"
-                                                           Margin="0,0,0,5"/>
+                                                <!-- Game Profiles Section (Always Expanded) -->
+                                                <Border Grid.Row="0"
+                                                        BorderBrush="{StaticResource BorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="3"
+                                                        Margin="0,0,0,10">
+                                                        <StackPanel>
+                                                                <TextBlock Text="Game Profiles"
+                                                                           FontWeight="Bold"
+                                                                           Margin="10,10,10,5"/>
 
-                                                <ListBox x:Name="profilesListBox"
-                                                         Grid.Row="1"
-                                                         Margin="0,0,0,10"
-                                                         MinHeight="150"
-                                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
-                                                        <ListBox.ItemTemplate>
-                                                                <DataTemplate>
-                                                                        <Border x:Name="itemBorder"
-                                                                                BorderThickness="2"
-                                                                                BorderBrush="Transparent"
-                                                                                CornerRadius="3"
-                                                                                Padding="5"
-                                                                                Margin="2">
-                                                                                <StackPanel Orientation="Horizontal">
-                                                                                        <TextBlock x:Name="activeIndicator"
-                                                                                                   Text="▶ "
-                                                                                                   FontWeight="Bold"
-                                                                                                   Foreground="{StaticResource AccentBrush}"
-                                                                                                   Visibility="Collapsed"
-                                                                                                   VerticalAlignment="Center"/>
-                                                                                        <TextBlock x:Name="profileNameText"
-                                                                                                   Text="{Binding ProfileName}"
-                                                                                                   VerticalAlignment="Center"/>
-                                                                                        <TextBlock x:Name="windowTitleText"
-                                                                                                   Text="{Binding GameWindowTitle, StringFormat=' ({0})'}"
-                                                                                                   Foreground="{StaticResource SecondaryForegroundBrush}"
-                                                                                                   FontStyle="Italic"
-                                                                                                   VerticalAlignment="Center"/>
-                                                                                </StackPanel>
-                                                                        </Border>
-                                                                        <DataTemplate.Triggers>
-                                                                                <DataTrigger Value="True">
-                                                                                        <DataTrigger.Binding>
-                                                                                                <MultiBinding Converter="{StaticResource ProfileComparisonConverter}">
-                                                                                                        <Binding/>
-                                                                                                        <Binding Path="GameProfileManager.ActiveProfile"
-                                                                                                                 RelativeSource="{RelativeSource AncestorType=Window}"/>
-                                                                                                </MultiBinding>
-                                                                                        </DataTrigger.Binding>
-                                                                                        <Setter TargetName="itemBorder"
-                                                                                                Property="Background"
-                                                                                                Value="{StaticResource SelectedBackgroundBrush}"/>
-                                                                                        <Setter TargetName="itemBorder"
-                                                                                                Property="BorderBrush"
-                                                                                                Value="{StaticResource AccentBrush}"/>
-                                                                                        <Setter TargetName="activeIndicator"
-                                                                                                Property="Visibility"
-                                                                                                Value="Visible"/>
-                                                                                        <Setter TargetName="profileNameText"
-                                                                                                Property="FontWeight"
-                                                                                                Value="Bold"/>
-                                                                                </DataTrigger>
-                                                                        </DataTemplate.Triggers>
-                                                                </DataTemplate>
-                                                        </ListBox.ItemTemplate>
-                                                </ListBox>
+                                                                <ListBox x:Name="profilesListBox"
+                                                                         MaxHeight="300"
+                                                                         MinHeight="60"
+                                                                         Height="Auto"
+                                                                         Margin="10,0,10,10"
+                                                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                                                        <ListBox.ItemTemplate>
+                                                                                <DataTemplate>
+                                                                                        <Border x:Name="itemBorder"
+                                                                                                BorderThickness="2"
+                                                                                                BorderBrush="Transparent"
+                                                                                                CornerRadius="3"
+                                                                                                Padding="5"
+                                                                                                Margin="2">
+                                                                                                <StackPanel Orientation="Horizontal">
+                                                                                                        <TextBlock x:Name="activeIndicator"
+                                                                                                                   Text="▶ "
+                                                                                                                   FontWeight="Bold"
+                                                                                                                   Foreground="{StaticResource AccentBrush}"
+                                                                                                                   Visibility="Collapsed"
+                                                                                                                   VerticalAlignment="Center"/>
+                                                                                                        <TextBlock x:Name="profileNameText"
+                                                                                                                   Text="{Binding ProfileName}"
+                                                                                                                   VerticalAlignment="Center"/>
+                                                                                                        <TextBlock x:Name="windowTitleText"
+                                                                                                                   Text="{Binding GameWindowTitle, StringFormat=' ({0})'}"
+                                                                                                                   Foreground="{StaticResource SecondaryForegroundBrush}"
+                                                                                                                   FontStyle="Italic"
+                                                                                                                   VerticalAlignment="Center"/>
+                                                                                                </StackPanel>
+                                                                                        </Border>
+                                                                                        <DataTemplate.Triggers>
+                                                                                                <DataTrigger Value="True">
+                                                                                                        <DataTrigger.Binding>
+                                                                                                                <MultiBinding Converter="{StaticResource ProfileComparisonConverter}">
+                                                                                                                        <Binding/>
+                                                                                                                        <Binding Path="GameProfileManager.ActiveProfile"
+                                                                                                                                 RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                                                                </MultiBinding>
+                                                                                                        </DataTrigger.Binding>
+                                                                                                        <Setter TargetName="itemBorder"
+                                                                                                                Property="Background"
+                                                                                                                Value="{StaticResource SelectedBackgroundBrush}"/>
+                                                                                                        <Setter TargetName="itemBorder"
+                                                                                                                Property="BorderBrush"
+                                                                                                                Value="{StaticResource AccentBrush}"/>
+                                                                                                        <Setter TargetName="activeIndicator"
+                                                                                                                Property="Visibility"
+                                                                                                                Value="Visible"/>
+                                                                                                        <Setter TargetName="profileNameText"
+                                                                                                                Property="FontWeight"
+                                                                                                                Value="Bold"/>
+                                                                                                </DataTrigger>
+                                                                                        </DataTemplate.Triggers>
+                                                                                </DataTemplate>
+                                                                        </ListBox.ItemTemplate>
+                                                                </ListBox>
 
-                                                <StackPanel Grid.Row="2"
-                                                            Orientation="Horizontal"
-                                                            HorizontalAlignment="Right"
-                                                            Margin="0,0,0,20">
-                                                        <Button Content="New"
-                                                                Click="NewProfileButton_Click"
-                                                                Margin="5"/>
-                                                        <Button Content="Edit"
-                                                                Click="EditProfileButton_Click"
-                                                                Margin="5"/>
-                                                        <Button Content="Delete"
-                                                                Click="DeleteProfileButton_Click"
-                                                                Margin="5"/>
-                                                        <Button Content="Set Active"
-                                                                Click="SetActiveProfileButton_Click"
-                                                                Margin="5"
-                                                                FontWeight="Bold"/>
-                                                </StackPanel>
+                                                                <StackPanel Orientation="Horizontal"
+                                                                            HorizontalAlignment="Right"
+                                                                            Margin="10,0,10,10">
+                                                                        <Button Content="New"
+                                                                                Click="NewProfileButton_Click"
+                                                                                Margin="5"/>
+                                                                        <Button Content="Edit"
+                                                                                Click="EditProfileButton_Click"
+                                                                                Margin="5"/>
+                                                                        <Button Content="Delete"
+                                                                                Click="DeleteProfileButton_Click"
+                                                                                Margin="5"/>
+                                                                        <Button Content="Set Active"
+                                                                                Click="SetActiveProfileButton_Click"
+                                                                                Margin="5"
+                                                                                FontWeight="Bold"/>
+                                                                </StackPanel>
+                                                        </StackPanel>
+                                                </Border>
 
-                                                <!-- Debug Settings Section -->
-                                                <GroupBox Grid.Row="3"
-                                                          Header="Debug Settings">
-                                                        <Grid Margin="5">
+                                                <!-- Debug Settings Section (Collapsible) -->
+                                                <Expander Grid.Row="1"
+                                                          Header="Debug Settings"
+                                                          IsExpanded="False"
+                                                          Margin="0,0,0,10">
+                                                        <Grid Margin="10">
                                                                 <Grid.RowDefinitions>
                                                                         <RowDefinition Height="Auto"/>
                                                                         <RowDefinition Height="Auto"/>
@@ -283,14 +288,17 @@
                                                                         Click="OpenDebugFolder_Click"
                                                                         Margin="0,10,0,5"/>
                                                         </Grid>
-                                                </GroupBox>
+                                                </Expander>
 
-                                                <!-- OCR Settings -->
-                                                <GroupBox Grid.Row="4"
+                                                <!-- OCR Settings (Collapsible) -->
+                                                <Expander Grid.Row="2"
                                                           Header="OCR Settings"
-                                                          Margin="0,10,0,10">
+                                                          IsExpanded="True"
+                                                          Margin="0,0,0,10">
                                                         <Grid Margin="10">
                                                                 <Grid.RowDefinitions>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
                                                                         <RowDefinition Height="Auto"/>
                                                                         <RowDefinition Height="Auto"/>
                                                                 </Grid.RowDefinitions>
@@ -331,13 +339,54 @@
                                                                                    Margin="10,0,0,0"
                                                                                    Width="40"/>
                                                                 </StackPanel>
-                                                        </Grid>
-                                                </GroupBox>
 
-                                                <!-- Hotkey Settings -->
-                                                <GroupBox Grid.Row="5"
+                                                                <!-- Language Selection -->
+                                                                <TextBlock Grid.Row="2"
+                                                                           Grid.Column="0"
+                                                                           Grid.ColumnSpan="2"
+                                                                           Text="OCR Languages:"
+                                                                           Margin="0,10,0,5"/>
+
+                                                                <ItemsControl Grid.Row="3"
+                                                                              Grid.Column="0"
+                                                                              Grid.ColumnSpan="2"
+                                                                              x:Name="languagesList"
+                                                                              Margin="0,5,0,0">
+                                                                        <ItemsControl.ItemsPanel>
+                                                                                <ItemsPanelTemplate>
+                                                                                        <WrapPanel Orientation="Horizontal"/>
+                                                                                </ItemsPanelTemplate>
+                                                                        </ItemsControl.ItemsPanel>
+                                                                        <ItemsControl.ItemTemplate>
+                                                                                <DataTemplate>
+                                                                                        <GroupBox Header="{Binding Key}"
+                                                                                                  Margin="5"
+                                                                                                  MinWidth="150"
+                                                                                                  Padding="5">
+                                                                                                <ItemsControl ItemsSource="{Binding Value}">
+                                                                                                        <ItemsControl.ItemTemplate>
+                                                                                                                <DataTemplate>
+                                                                                                                        <CheckBox Content="{Binding DisplayName}"
+                                                                                                                                  IsChecked="{Binding IsSelected}"
+                                                                                                                                  Tag="{Binding Code}"
+                                                                                                                                  Checked="LanguageCheckBox_Changed"
+                                                                                                                                  Unchecked="LanguageCheckBox_Changed"
+                                                                                                                                  Margin="5,2"/>
+                                                                                                                </DataTemplate>
+                                                                                                        </ItemsControl.ItemTemplate>
+                                                                                                </ItemsControl>
+                                                                                        </GroupBox>
+                                                                                </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                        </Grid>
+                                                </Expander>
+
+                                                <!-- Hotkey Settings (Collapsible) -->
+                                                <Expander Grid.Row="3"
                                                           Header="Hotkey Settings"
-                                                          Margin="0,10,0,10">
+                                                          IsExpanded="False"
+                                                          Margin="0,0,0,10">
                                                         <Grid Margin="10">
                                                                 <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="Auto"/>
@@ -362,13 +411,14 @@
                                                                         Margin="10,0,0,0"
                                                                         Click="SetDefaultHotKey_Click"/>
                                                         </Grid>
-                                                </GroupBox>
+                                                </Expander>
 
-                                                <!-- Export Settings -->
-                                                <GroupBox Grid.Row="6"
+                                                <!-- Export Settings (Collapsible) -->
+                                                <Expander Grid.Row="4"
                                                           Header="Export Settings"
-                                                          Margin="5">
-                                                        <StackPanel>
+                                                          IsExpanded="False"
+                                                          Margin="0,0,0,10">
+                                                        <StackPanel Margin="10">
                                                                 <Label Content="Export Folder:"/>
                                                                 <Grid>
                                                                         <Grid.ColumnDefinitions>
@@ -403,10 +453,8 @@
                                                                                   Checked="UseLocalTimeCheckBox_Changed"
                                                                                   Unchecked="UseLocalTimeCheckBox_Changed"/>
                                                                 </StackPanel>
-
-                                                                <!-- Save Settings button removed as settings are now auto-saved -->
                                                         </StackPanel>
-                                                </GroupBox>
+                                                </Expander>
                                         </Grid>
                                 </ScrollViewer>
                         </TabItem>
