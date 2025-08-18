@@ -16,118 +16,65 @@ BlackoutScanner is designed to extract information from game windows using OCR (
 - **Data Management**: Save extracted data in both JSON and TSV formats for easy analysis
 - **Visual Editor**: Define capture areas using an intuitive visual interface
 - **Live Preview**: See real-time previews of selected screen regions
+- **Hotkey Support**: Use keyboard shortcuts for quick scanning
+- **Auto-save**: Automatically save captured data with customizable intervals
 
-## Getting Started
+## Installation
 
 ### Prerequisites
 
 - Windows 10 or Windows 11 operating system
-- At least 4GB of free disk space for Visual Studio installation
-- Internet connection for downloading software
-- Supported games must be running in windowed mode for capture
+- .NET Framework 4.8 or later
+- Supported games must be running in windowed or borderless windowed mode
 
-### Installation
+### Download and Install
 
-Since there are no pre-built releases yet, you'll need to build the application from source. Don't worry - we'll guide you through each step!
+1. Go to the [Releases](https://github.com/throndir2/BlackoutScanner/releases) page
+2. Download the latest `BlackoutScanner.zip` file
+3. Extract the ZIP file to your desired location
+4. Run `BlackoutScanner.exe`
 
-#### Step 1: Install Visual Studio Community (Free)
+## Usage Guide
 
-1. Go to [https://visualstudio.microsoft.com/downloads/](https://visualstudio.microsoft.com/downloads/)
-2. Click the "Free download" button under **Visual Studio Community**
-3. Run the downloaded installer (`VisualStudioSetup.exe`)
-4. When the installer opens, you'll see a list of workloads. Check the box for:
-   - **.NET desktop development**
-5. On the right side, make sure these are checked:
-   - .NET Framework 4.8 development tools
-   - Windows Presentation Foundation (WPF)
-6. Click "Install" (this may take 15-30 minutes depending on your internet speed)
-7. Once installed, you can close Visual Studio if it opens automatically
+### Creating Your First Game Profile
 
-#### Step 2: Download the Source Code
+1. **Launch BlackoutScanner** and click the **"Configuration"** tab, and click on the **"New"** button
+2. **Enter Profile Details**:
+   - **Profile Name**: Give your profile a descriptive name (e.g., "MyGame - Character Stats")
+   - **Game Window Title**: Enter the exact title of your game window as it appears in the title bar, or press the **"Search..."** button and look for your running game
 
-**Option A: Using Visual Studio's Built-in Git (Recommended)**
-1. Open **Visual Studio**
-2. On the start window, click "Clone a repository"
-3. In the "Repository location" field, paste:
-   ```
-   https://github.com/throndir2/BlackoutScanner.git
-   ```
-4. Choose where you want to save it (like `C:\Users\YourUsername\Documents\`) or use the default location
-5. Click "Clone"
-6. Visual Studio will download the code and open the project automatically
+### Setting Up Capture Areas
 
-**Option B: Download as ZIP**
-1. Go to the BlackoutScanner repository page on GitHub
-2. Click the green "Code" button
-3. Click "Download ZIP"
-4. Extract the ZIP file to a folder like `C:\Users\YourUsername\Documents\BlackoutScanner`
-5. Open Visual Studio and click "Open a project or solution"
-6. Navigate to the extracted folder and open the `.sln` file
+#### Category
 
-#### Step 3: Build and Run the Application
+1. **Category**: Click **"Add Category"** in your profile
+   - **Category Name**: Label for the captured data (e.g., "Player", "Alliance")
+   - **Comparison Mode**: Specifies comparing pixels to determine when to take a snapshot of the game
+   - **Category Area**: Click **"Define Category Area"** then select a part of the screen that is unique to that menu (e.g., the title of the menu)
+2. **Configure Each Field**: Click **"Add Field"** 
+   - **Field Name**: Label for the captured data (e.g., "Player Name", "Level", "Gold")
+   - **Key Field**: Check if this value is what makes this entry unique (e.g., this should be checked for an Id field) 
+   - **Area**: Click **"Define"** then select the text on the game that has this value for the app to scan
 
-1. Once the project is open in Visual Studio, wait for it to finish loading (you'll see activity in the bottom status bar)
-2. At the top of Visual Studio, find the dropdown that says either "Debug" or "Release" - change it to **Release**
-3. Press **Ctrl+Shift+B** or go to menu **Build → Build Solution**
-   - You'll see build output in the bottom panel
-   - Wait for it to say "Build succeeded"'
-4. Find `BlackoutScanner.exe` in the `bin\Release` folder, and run it
+### Scanning
 
-#### Step 4: Create a Desktop Shortcut (Optional)
+1. **Scan**: Click **"Start Scanning"**, then navigate to each of the defined menus in-game to start scraping data.
 
-After building successfully:
-1. In Visual Studio, right-click on the project name in Solution Explorer
-2. Select "Open Folder in File Explorer"
-3. Navigate to `bin\Release` folder
-4. Find `BlackoutScanner.exe`
-5. Right-click on it and select "Create shortcut"
-6. Move the shortcut to your desktop
+#### Editing and Validation
 
-#### Step 5: Updating
+1. **Edit Values**: If OCR result is incorrect, click on the field in the **"Scan"** tab, manually modify, then click on **"Save"**
 
-1. Open the `.sln` file
-2. Go to the `Git Changes` tab next to `Solution Explorer`
-3. Find the down arrow symbol, hover over it to ensure it says `Pull`
-4. Click on it and it will pull from the `main` branch
+#### Exporting Data
 
-### Troubleshooting
+1. **Export Formats**:
+   - **JSON**: Structured data perfect for APIs and programming
+   - **TSV**: Tab-separated values for Excel/Google Sheets
 
-**"Build failed" errors:**
-- Make sure you selected **.NET desktop development** when installing Visual Studio
-- Try going to **Tools → NuGet Package Manager → Manage NuGet Packages for Solution** and click "Restore" if you see a restore button
+## Support
 
-**"Cannot find the game window":**
-- Make sure your game is running in windowed mode (not fullscreen)
-- The game window title must match exactly what you enter in the profile
-
-## Usage
-
-1. **Create a Game Profile**:
-   - Click "New Profile" and enter a profile name
-   - Set the game window title
-   - Add categories and fields to capture
-
-2. **Define Capture Areas**:
-   - Use the visual editor to select screen regions
-   - The selected areas will be saved as relative coordinates
-
-3. **Start Scanning**:
-   - Select your game profile
-   - Click "Start Scan"
-   - Data will be automatically captured and saved
-
-4. **View and Export Data**:
-   - Captured data is saved in both JSON and TSV formats
-   - Review and edit data within the application
-
-## Game Profiles
-
-Game profiles define what data should be captured from specific game windows. Each profile includes:
-
-- **Profile Name**: A user-friendly name for the profile
-- **Game Window Title**: The title of the game window to capture
-- **Categories**: Groups of data fields (e.g., "Player Profile", "Guild Info")
-- **Fields**: Individual data elements to capture, with their screen positions
+- **Issues**: Report bugs on the [GitHub Issues](https://github.com/throndir2/BlackoutScanner/issues) page
+- **Discussions**: Join community discussions for tips and profile sharing
+- **Wiki**: Check the [Wiki](https://github.com/throndir2/BlackoutScanner/wiki) for detailed guides
 
 ## License
 
@@ -138,3 +85,4 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 - This tool was initially developed for "Grand Cross: Age of Titans" data collection
 - Further extended to dynamically handle any game for the Blackout gaming community
 - Built with WPF and .NET technologies
+- OCR powered by Tesseract
