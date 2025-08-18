@@ -13,6 +13,7 @@
 - Consistent styling for expanded/collapsed sections
 - Streamlined scrolling behavior in the Configuration tab
 - Added Russian as default languages.
+- Optimization of code and made it more performant for OCR scanning
 
 ### Fixed
 - Fixed critical OCR error "Value cannot be null. (Parameter 'encoder')" by using explicit PNG format for bitmap processing
