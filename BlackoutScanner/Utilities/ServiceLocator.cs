@@ -49,8 +49,24 @@ namespace BlackoutScanner.Utilities
             services.AddSingleton<IScreenCapture, ScreenCapture>();
             services.AddSingleton<IHotKeyManager, HotKeyManager>();
 
-            // Register slow-initializing OCR-related services last
-            services.AddSingleton<IOCRProcessor, OCRProcessor>();
+            // Register slow-initializing OCR-related services last with error handling
+            services.AddSingleton<IOCRProcessor>(provider =>
+            {
+                try
+                {
+                    Log.Information("Initializing OCR Processor...");
+                    return new OCRProcessor(
+                        provider.GetRequiredService<IImageProcessor>(),
+                        provider.GetRequiredService<IFileSystem>(),
+                        provider.GetRequiredService<ISettingsManager>()
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Failed to initialize OCR processor");
+                    throw;
+                }
+            });
             services.AddSingleton<IScanner, Scanner>();
 
             Log.Information("Service Locator successfully configured all services");

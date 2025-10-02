@@ -275,6 +275,7 @@ namespace BlackoutScanner
             foreach (var field in category.Fields)
             {
                 headers.Add(field.Name);
+                headers.Add($"{field.Name}_Confidence");
             }
 
             // Add row index if this is a multi-entity category
@@ -306,6 +307,19 @@ namespace BlackoutScanner
                     else if (header == "GroupId" && record.GroupId.HasValue)
                     {
                         values.Add(record.GroupId.Value.ToString());
+                    }
+                    else if (header.EndsWith("_Confidence"))
+                    {
+                        // Extract field name from confidence column header
+                        var fieldName = header.Substring(0, header.Length - "_Confidence".Length);
+                        if (record.FieldConfidences?.TryGetValue(fieldName, out var confidence) ?? false)
+                        {
+                            values.Add((confidence * 100).ToString("F1")); // Convert to percentage with 1 decimal place
+                        }
+                        else
+                        {
+                            values.Add("N/A");
+                        }
                     }
                     else if (record.Fields.TryGetValue(header, out var value))
                     {
@@ -419,11 +433,20 @@ namespace BlackoutScanner
                     existingRecord.Fields[field.Key] = field.Value;
                 }
                 existingRecord.ScanDate = newRecord.ScanDate;
+
+                // IMPORTANT: Also update the confidence scores!
+                if (newRecord.FieldConfidences != null)
+                {
+                    existingRecord.FieldConfidences = new Dictionary<string, float>(newRecord.FieldConfidences);
+                }
+
+                Log.Debug($"Updated existing record with hash {hash}, confidence scores: {string.Join(", ", existingRecord.FieldConfidences?.Select(kvp => $"{kvp.Key}={kvp.Value:F2}") ?? new[] { "none" })}");
             }
             else
             {
                 // Add new record data
                 DataRecordDictionary.Add(hash, newRecord);
+                Log.Debug($"Added new record with hash {hash}, confidence scores: {string.Join(", ", newRecord.FieldConfidences?.Select(kvp => $"{kvp.Key}={kvp.Value:F2}") ?? new[] { "none" })}");
             }
 
             hasUnsavedChanges = true; // Mark as having changes

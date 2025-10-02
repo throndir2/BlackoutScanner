@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using BlackoutScanner.Interfaces;
@@ -23,6 +24,14 @@ namespace BlackoutScanner.Services
         private Dictionary<string, OCRResult> ocrResultsCache = new Dictionary<string, OCRResult>();
         private Dictionary<string, string> imageDataCache = new Dictionary<string, string>();
 
+        // Single static lock for ALL Tesseract operations across the application
+        private static readonly object _globalTesseractLock = new object();
+        private static readonly SemaphoreSlim _initializationSemaphore = new SemaphoreSlim(1, 1);
+        private static bool _globalInitialized = false;
+
+        private bool _isInitialized = false;
+        private bool _isDisposed = false;
+
         private readonly IImageProcessor _imageProcessor;
         private readonly IFileSystem _fileSystem;
         private readonly string _tessdataDirectory;
@@ -37,10 +46,11 @@ namespace BlackoutScanner.Services
             _settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
 
             // Default values
-            _tessdataDirectory = "tessdata";
+            _tessdataDirectory = Path.GetFullPath("tessdata"); // Use absolute path
             _currentLanguages = _settingsManager.Settings.SelectedLanguages ?? new List<string> { "eng", "kor", "jpn", "chi_sim", "chi_tra", "rus" };
 
-            InitializeTesseractEngines(_currentLanguages, _tessdataDirectory);
+            // Lazy initialization - don't initialize engines in constructor
+            // This prevents issues during DI container setup
         }
 
         // For testing and specific configurations
@@ -49,10 +59,34 @@ namespace BlackoutScanner.Services
             _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
             _settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
-            _tessdataDirectory = tessdataDirectory ?? throw new ArgumentNullException(nameof(tessdataDirectory));
+            _tessdataDirectory = Path.GetFullPath(tessdataDirectory ?? throw new ArgumentNullException(nameof(tessdataDirectory)));
             _currentLanguages = supportedLanguages?.ToList() ?? throw new ArgumentNullException(nameof(supportedLanguages));
 
-            InitializeTesseractEngines(_currentLanguages, _tessdataDirectory);
+            // Lazy initialization - don't initialize engines in constructor
+        }
+
+        // Lazy initialization method
+        private void EnsureInitialized()
+        {
+            if (_isInitialized || _isDisposed) return;
+
+            _initializationSemaphore.Wait();
+            try
+            {
+                if (_isInitialized || _isDisposed) return;
+
+                // Initialize with global lock to prevent any concurrent Tesseract operations
+                lock (_globalTesseractLock)
+                {
+                    InitializeTesseractEnginesInternal(_currentLanguages, _tessdataDirectory);
+                    _isInitialized = true;
+                    _globalInitialized = true;
+                }
+            }
+            finally
+            {
+                _initializationSemaphore.Release();
+            }
         }
 
         // Loads the OCR results cache from a dictionary.
@@ -223,6 +257,8 @@ namespace BlackoutScanner.Services
 
         public OCRResult ProcessImage(Bitmap bitmap, string category = "", string fieldName = "")
         {
+            EnsureInitialized(); // Ensure engines are initialized before use
+
             // Get values from settings instead of hardcoding
             int attempt = 0;
             bool numericalOnly = false;
@@ -243,6 +279,8 @@ namespace BlackoutScanner.Services
         // Process image with fallback to different OCR engines if needed
         public OCRResult ProcessImageWithFallback(Bitmap bitmap, int attempt, bool numericalOnly, bool saveDebugImages = false, string debugImagesFolder = "DebugImages", bool verboseLogging = false, string category = "", string fieldName = "")
         {
+            EnsureInitialized(); // Ensure engines are initialized before use
+
             Log.Debug($"[OCRProcessor.ProcessImageWithFallback] Called with saveDebugImages={saveDebugImages}, category='{category}', field='{fieldName}'");
 
             // Get confidence threshold from settings
@@ -288,17 +326,17 @@ namespace BlackoutScanner.Services
                 return cachedResult;
             }
 
-            // In single-engine mode, just process once with the combined engine
-            if (!useMultiEngine)
+            // Lock globally for ALL Tesseract operations
+            lock (_globalTesseractLock)
             {
-                var combinedKey = string.Join("+", _currentLanguages);
-                if (tesseractEngines.ContainsKey(combinedKey))
+                // In single-engine mode, just process once with the combined engine
+                if (!useMultiEngine)
                 {
-                    var engine = tesseractEngines[combinedKey];
-                    var lockObj = engineLocks.GetOrAdd(combinedKey, new object());
-
-                    lock (lockObj)
+                    var combinedKey = string.Join("+", _currentLanguages);
+                    if (tesseractEngines.ContainsKey(combinedKey))
                     {
+                        var engine = tesseractEngines[combinedKey];
+
                         var result = ProcessImageWithTesseract(bitmapCopy, engine);
                         result.ImageHash = imageHash;
                         ocrResultsCache[imageHash] = result;
@@ -318,27 +356,21 @@ namespace BlackoutScanner.Services
                         return result;
                     }
                 }
-            }
 
-            // If we're using multi-engine mode or the single combined engine isn't available,
-            // fall back to the original multiple-engine logic
-            OCRResult? bestResult = null;
-            float highestAverageConfidence = 0;
+                // Multi-engine processing (existing logic but within global lock)
+                OCRResult? bestResult = null;
+                float highestAverageConfidence = 0;
 
-            // With some numbers, the eng model isn't able to parse the value.
-            var enginesToUse = numericalOnly ? new[] { "numerical" } : tesseractEngines.Keys.ToArray();
+                var enginesToUse = numericalOnly ? new[] { "numerical" } : tesseractEngines.Keys.ToArray();
 
-            foreach (var key in enginesToUse)
-            {
-                TesseractEngine engine = tesseractEngines[key];
-                object lockObj = engineLocks[key];
-
-                lock (lockObj) // Serialize access to the TesseractEngine
+                foreach (var key in enginesToUse)
                 {
+                    if (!tesseractEngines.ContainsKey(key)) continue;
+
+                    TesseractEngine engine = tesseractEngines[key];
                     Log.Information($"Processing image with language: {key}");
 
                     var currentResult = ProcessImageWithTesseract(bitmapCopy, engine);
-
                     currentResult.ImageHash = imageHash;
 
                     var allWordsMeetThreshold = currentResult.WordConfidences.All(wc => wc.Confidence >= confidenceThreshold);
@@ -347,15 +379,11 @@ namespace BlackoutScanner.Services
                     if (allWordsMeetThreshold)
                     {
                         ocrResultsCache[imageHash] = currentResult;
-
-                        // Add image data for UI display
                         imageDataCache[imageHash] = ConvertBitmapImageToBase64(bitmapImage);
 
                         Log.Information($"All words met confidence threshold. Language: {key}");
 
-                        // Dispose the copy
                         bitmapCopy.Dispose();
-
                         return currentResult;
                     }
                     else if (currentAverageConfidence > highestAverageConfidence)
@@ -364,8 +392,6 @@ namespace BlackoutScanner.Services
                         highestAverageConfidence = currentAverageConfidence;
                     }
 
-                    // If OCR mode is set to numerical, this will have to be some sort of number.
-                    // In that case, let's try to convert it to a number, and if so, it's a good result.
                     if (numericalOnly)
                     {
                         long numericalText = 0;
@@ -373,132 +399,224 @@ namespace BlackoutScanner.Services
                         {
                             Log.Information($"Text is a number.");
 
-                            // Cache the result and image data
                             ocrResultsCache[imageHash] = currentResult;
                             imageDataCache[imageHash] = ConvertBitmapImageToBase64(bitmapImage);
 
-                            // Dispose bitmap copy before returning
                             bitmapCopy.Dispose();
-
                             return currentResult;
                         }
                     }
                 }
+
+                // Cache best result
+                if (bestResult != null)
+                {
+                    ocrResultsCache[imageHash] = bestResult;
+                    imageDataCache[imageHash] = ConvertBitmapImageToBase64(bitmapImage);
+                }
+
+                bitmapCopy.Dispose();
+                return bestResult ?? new OCRResult { ImageHash = string.Empty, Text = string.Empty, WordConfidences = new List<(string, float)>() };
             }
-
-            // If we reach here, it means no language engine resulted in all words meeting the confidence threshold
-            Log.Information($"Falling back to best result based on highest average confidence.");
-
-            // If a new result is computed, cache it
-            if (bestResult != null)
-            {
-                ocrResultsCache[imageHash] = bestResult;
-
-                // Add image data for UI display
-                imageDataCache[imageHash] = ConvertBitmapImageToBase64(bitmapImage);
-            }
-
-            // Dispose the bitmap copy before returning
-            bitmapCopy.Dispose();
-
-            return bestResult ?? new OCRResult { ImageHash = string.Empty, Text = string.Empty, WordConfidences = new List<(string, float)>() };
         }
 
-        // Initialize Tesseract engines with supported languages
-        private void InitializeTesseractEngines(List<string> supportedLanguages, string tessdataDirectory)
+        // Internal initialization (called within locks)
+        private void InitializeTesseractEnginesInternal(List<string> supportedLanguages, string tessdataDirectory)
         {
-            if (!Directory.Exists(tessdataDirectory))
+            try
             {
-                Directory.CreateDirectory(tessdataDirectory);
+                // Ensure tessdata directory exists with absolute path
+                string absoluteTessdataPath = Path.GetFullPath(tessdataDirectory);
+                if (!Directory.Exists(absoluteTessdataPath))
+                {
+                    Directory.CreateDirectory(absoluteTessdataPath);
+                }
+
+                // Validate and download language files first (before ANY engine creation)
+                ValidateAndDownloadLanguageFiles(supportedLanguages, absoluteTessdataPath);
+
+                // Check if we should use multi-engine mode
+                bool useMultiEngine = _settingsManager?.Settings?.UseMultiEngineOCR ?? false;
+
+                if (useMultiEngine)
+                {
+                    Log.Information("Initializing OCR in Enhanced Accuracy mode (multiple engines)");
+                    InitializeMultipleEnginesSafe(supportedLanguages, absoluteTessdataPath);
+                }
+                else
+                {
+                    Log.Information("Initializing OCR in Fast Processing mode (single combined engine)");
+                    InitializeSingleCombinedEngineSafe(supportedLanguages, absoluteTessdataPath);
+                }
+
+                // Initialize a dedicated numerical engine
+                InitializeNumericalEngineSafe(absoluteTessdataPath);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to initialize Tesseract engines");
+                // Clean up any partially initialized engines
+                DisposeEnginesInternal();
+                throw;
+            }
+        }
+
+        private void ValidateAndDownloadLanguageFiles(List<string> languages, string tessdataDirectory)
+        {
+            // First, validate all files exist or download them
+            var missingFiles = new List<string>();
+
+            foreach (string lang in languages)
+            {
+                string trainedDataPath = Path.Combine(tessdataDirectory, $"{lang}.traineddata");
+                if (!File.Exists(trainedDataPath))
+                {
+                    missingFiles.Add(lang);
+                }
             }
 
+            if (missingFiles.Any())
+            {
+                Log.Information($"Downloading missing language files: {string.Join(", ", missingFiles)}");
+                DownloadLanguageFilesSafe(missingFiles, tessdataDirectory);
+            }
+
+            // Verify all files now exist
+            foreach (string lang in languages)
+            {
+                string trainedDataPath = Path.Combine(tessdataDirectory, $"{lang}.traineddata");
+                if (!File.Exists(trainedDataPath))
+                {
+                    throw new FileNotFoundException($"Language file not found after download attempt: {trainedDataPath}");
+                }
+            }
+        }
+
+        private void DownloadLanguageFilesSafe(List<string> languages, string tessdataDirectory)
+        {
             using (var httpClient = new HttpClient())
             {
-                foreach (string lang in supportedLanguages)
+                httpClient.Timeout = TimeSpan.FromMinutes(5);
+
+                // Download files sequentially to avoid overwhelming the system
+                foreach (string lang in languages)
                 {
                     string trainedDataPath = Path.Combine(tessdataDirectory, $"{lang}.traineddata");
+                    string tempPath = trainedDataPath + ".tmp";
 
-                    if (!File.Exists(trainedDataPath))
+                    try
                     {
-                        Log.Information($"{lang}.traineddata file not found. Starting download...");
-                        try
-                        {
-                            var downloadUrl = $"https://github.com/tesseract-ocr/tessdata_best/raw/main/{lang}.traineddata";
-                            var fileBytes = httpClient.GetByteArrayAsync(downloadUrl).Result; // Synchronous download
-                            File.WriteAllBytes(trainedDataPath, fileBytes);
-                            Log.Information("Download completed for " + lang);
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Error($"Failed to download {lang}.traineddata: {ex.Message}");
-                            // Propagate the exception to be caught by the caller
-                            throw new InvalidOperationException($"Failed to initialize OCR engine for language '{lang}' due to download failure.", ex);
-                        }
+                        Log.Information($"Downloading {lang}.traineddata...");
+
+                        var downloadUrl = $"https://github.com/tesseract-ocr/tessdata/raw/main/{lang}.traineddata"; // Use standard tessdata, not tessdata_best for smaller files
+                        var fileBytes = httpClient.GetByteArrayAsync(downloadUrl).Result;
+
+                        // Write to temp file first
+                        File.WriteAllBytes(tempPath, fileBytes);
+
+                        // Then move to final location (atomic operation)
+                        if (File.Exists(trainedDataPath))
+                            File.Delete(trainedDataPath);
+                        File.Move(tempPath, trainedDataPath);
+
+                        Log.Information($"Successfully downloaded {lang}.traineddata");
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        Log.Information($"{lang}.traineddata file already exists. No download needed for " + lang);
+                        // Clean up temp file
+                        if (File.Exists(tempPath))
+                            File.Delete(tempPath);
+
+                        Log.Error($"Failed to download {lang}.traineddata: {ex.Message}");
+                        throw new InvalidOperationException($"Failed to download language file for '{lang}'", ex);
                     }
                 }
             }
+        }
 
-            // Check if we should use multi-engine mode
-            bool useMultiEngine = _settingsManager?.Settings?.UseMultiEngineOCR ?? false;
-
-            if (useMultiEngine)
-            {
-                Log.Information("Initializing OCR in Enhanced Accuracy mode (multiple engines)");
-            }
-            else
-            {
-                Log.Information("Initializing OCR in Fast Processing mode (single combined engine)");
-            }
-
-            // Initialize a combined engine with all languages
+        private void InitializeSingleCombinedEngineSafe(List<string> supportedLanguages, string tessdataDirectory)
+        {
             string allLanguagesCombined = string.Join("+", supportedLanguages);
-            Log.Information($"Initializing tesseract engine: {allLanguagesCombined}");
-            tesseractEngines[allLanguagesCombined] = new TesseractEngine(tessdataDirectory, allLanguagesCombined, EngineMode.Default);
-            engineLocks[allLanguagesCombined] = new object();
+            Log.Information($"Initializing single combined tesseract engine: {allLanguagesCombined}");
 
-            // Initialize engines for "eng" with each of the other languages
+            try
+            {
+                // Create engine with explicit error handling
+                var engine = new TesseractEngine(tessdataDirectory, allLanguagesCombined, EngineMode.Default);
+
+                // Verify engine is working with a simple test
+                using (var testBitmap = new Bitmap(1, 1))
+                using (var testPix = ConvertBitmapToPix(testBitmap))
+                using (var testPage = engine.Process(testPix))
+                {
+                    // Just ensure it doesn't crash
+                    _ = testPage.GetText();
+                }
+
+                tesseractEngines[allLanguagesCombined] = engine;
+                engineLocks[allLanguagesCombined] = new object();
+
+                Log.Information($"Successfully initialized combined engine: {allLanguagesCombined}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, $"Failed to initialize combined engine: {allLanguagesCombined}");
+                throw;
+            }
+        }
+
+        private void InitializeMultipleEnginesSafe(List<string> supportedLanguages, string tessdataDirectory)
+        {
+            // First initialize the combined engine
+            InitializeSingleCombinedEngineSafe(supportedLanguages, tessdataDirectory);
+
+            // Initialize individual engines one by one with proper delays
             foreach (var language in supportedLanguages)
             {
-                if (!tesseractEngines.ContainsKey(language))
+                try
                 {
-                    Log.Information($"Initializing tesseract engine: {language}");
-                    tesseractEngines[language] = new TesseractEngine(tessdataDirectory, language, EngineMode.Default);
+                    if (!tesseractEngines.ContainsKey(language))
+                    {
+                        Log.Information($"Initializing tesseract engine: {language}");
 
-                    // Initialize lock object for each engine
-                    engineLocks[language] = new object();
+                        // Add delay to prevent resource conflicts
+                        Thread.Sleep(500);
+
+                        var engine = new TesseractEngine(tessdataDirectory, language, EngineMode.Default);
+                        tesseractEngines[language] = engine;
+                        engineLocks[language] = new object();
+
+                        Log.Information($"Successfully initialized engine: {language}");
+                    }
+
                 }
-
-                if (language != "eng")
+                catch (Exception ex)
                 {
-                    // "eng" + other language
-                    string engPlusLanguage = $"eng+{language}";
-                    if (!tesseractEngines.ContainsKey(engPlusLanguage))
-                    {
-                        Log.Information($"Initializing tesseract engine: {engPlusLanguage}");
-                        tesseractEngines[engPlusLanguage] = new TesseractEngine(tessdataDirectory, engPlusLanguage, EngineMode.Default);
-                        engineLocks[engPlusLanguage] = new object();
-                    }
-
-                    // Other language + "eng"
-                    string languagePlusEng = $"{language}+eng";
-                    if (!tesseractEngines.ContainsKey(languagePlusEng))
-                    {
-                        Log.Information($"Initializing tesseract engine: {languagePlusEng}");
-                        tesseractEngines[languagePlusEng] = new TesseractEngine(tessdataDirectory, languagePlusEng, EngineMode.Default);
-                        engineLocks[languagePlusEng] = new object();
-                    }
+                    Log.Error(ex, $"Failed to initialize engine for language: {language}. Continuing with other languages.");
+                    // Don't throw - continue with other languages
                 }
             }
+        }
 
-            // Initialize a dedicated numerical engine
-            var numericalEngine = new TesseractEngine(tessdataDirectory, "eng", EngineMode.Default);
-            //numericalEngine.SetVariable("tessedit_char_whitelist", "0123456789,.");
-            tesseractEngines["numerical"] = numericalEngine;
-            engineLocks["numerical"] = new object();
+        private void InitializeNumericalEngineSafe(string tessdataDirectory)
+        {
+            try
+            {
+                // Only initialize if eng.traineddata exists
+                string engDataPath = Path.Combine(tessdataDirectory, "eng.traineddata");
+                if (File.Exists(engDataPath))
+                {
+                    var numericalEngine = new TesseractEngine(tessdataDirectory, "eng", EngineMode.Default);
+                    tesseractEngines["numerical"] = numericalEngine;
+                    engineLocks["numerical"] = new object();
+                    Log.Information("Successfully initialized numerical engine");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to initialize numerical engine. Continuing without it.");
+                // Non-critical, continue without numerical engine
+            }
         }
 
         private OCRResult ProcessImageWithTesseract(Bitmap bitmap, TesseractEngine engine)
@@ -624,48 +742,50 @@ namespace BlackoutScanner.Services
         // Dispose method to clean up Tesseract engines
         public void Dispose()
         {
-            DisposeEngines();
+            if (_isDisposed) return;
+
+            lock (_globalTesseractLock)
+            {
+                DisposeEnginesInternal();
+                _isDisposed = true;
+                _isInitialized = false;
+            }
         }
 
-        private void DisposeEngines()
+        private void DisposeEnginesInternal()
         {
-            foreach (var engine in tesseractEngines.Values)
+            foreach (var kvp in tesseractEngines)
             {
-                engine.Dispose();
+                try
+                {
+                    kvp.Value?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, $"Error disposing engine: {kvp.Key}");
+                }
             }
             tesseractEngines.Clear();
+            engineLocks.Clear();
         }
 
         // Add method to update languages dynamically
         public void UpdateLanguages(List<string> languages)
         {
-            Log.Information($"Updating OCR languages from [{string.Join(", ", _currentLanguages)}] to [{string.Join(", ", languages)}]");
+            EnsureInitialized();
 
-            // Find languages to remove
-            var toRemove = _currentLanguages.Except(languages).ToList();
-            var toAdd = languages.Except(_currentLanguages).ToList();
-
-            // Dispose engines for removed languages
-            foreach (var lang in toRemove)
+            lock (_globalTesseractLock)
             {
-                RemoveLanguageEngines(lang);
-            }
+                Log.Information($"Updating OCR languages from [{string.Join(", ", _currentLanguages)}] to [{string.Join(", ", languages)}]");
 
-            // Initialize engines for new languages
-            if (toAdd.Any())
-            {
-                InitializeAdditionalLanguages(toAdd);
-            }
+                // Dispose all existing engines
+                DisposeEnginesInternal();
 
-            _currentLanguages = new List<string>(languages);
+                // Reinitialize with new languages
+                _currentLanguages = new List<string>(languages);
+                _isInitialized = false;
 
-            // Ensure we always have at least the combined engine
-            var allLanguagesCombined = string.Join("+", languages);
-            if (!tesseractEngines.ContainsKey(allLanguagesCombined))
-            {
-                Log.Information($"Initializing combined engine: {allLanguagesCombined}");
-                tesseractEngines[allLanguagesCombined] = new TesseractEngine(_tessdataDirectory, allLanguagesCombined, EngineMode.Default);
-                engineLocks[allLanguagesCombined] = new object();
+                // Re-initialize will happen on next use via EnsureInitialized
             }
         }
 

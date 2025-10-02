@@ -25,6 +25,10 @@ namespace BlackoutScanner.Services
 
         private readonly object bitmapLock = new object();
 
+        // Change detection - track previous hashes to avoid unnecessary OCR
+        private Dictionary<string, string> previousCategoryHashes = new Dictionary<string, string>();
+        private Dictionary<string, string> previousFieldHashes = new Dictionary<string, string>();
+
         public event Action<Dictionary<string, object>>? DataUpdated;
         public event Action<string, BitmapImage>? ImageUpdated;
         public event Action<DateTime>? ScanDateUpdated;
@@ -64,6 +68,12 @@ namespace BlackoutScanner.Services
         {
             activeProfile = profile;
             continueScanning = true;
+
+            // Clear previous hashes when starting a new scan to ensure fresh detection
+            previousCategoryHashes.Clear();
+            previousFieldHashes.Clear();
+            Log.Debug("[Scanner.StartScanning] Cleared previous hash caches for change detection");
+
             Task.Run(() =>
             {
                 screenCapture.BringGameWindowToFront(activeProfile.GameWindowTitle);
@@ -109,6 +119,27 @@ namespace BlackoutScanner.Services
                     var categoryAbsoluteBounds = category.RelativeBounds.ToAbsolute(containerRect);
 
                     Log.Debug($"Scanner: Category '{category.Name}' relative bounds {category.RelativeBounds} converted to absolute {categoryAbsoluteBounds}");
+
+                    // First check if category area has changed to avoid unnecessary processing
+                    string categoryHash;
+                    using (var categoryBitmap = gameWindowBitmap.Clone(categoryAbsoluteBounds, gameWindowBitmap.PixelFormat))
+                    {
+                        categoryHash = ocrProcessor.GenerateImageHash(
+                            ocrProcessor.ConvertBitmapToBitmapImage(categoryBitmap)
+                        );
+
+                        if (previousCategoryHashes.TryGetValue(category.Name, out var prevHash) &&
+                            prevHash == categoryHash)
+                        {
+                            // Category hasn't changed, skip processing
+                            Log.Debug($"Scanner: Category '{category.Name}' unchanged (hash match), skipping processing");
+                            continue;
+                        }
+
+                        // Store the new hash for next comparison
+                        previousCategoryHashes[category.Name] = categoryHash;
+                        Log.Debug($"Scanner: Category '{category.Name}' changed (new hash), proceeding with processing");
+                    }
 
                     // Check if this category matches based on its comparison mode
                     bool isCategoryMatch = false;
@@ -165,13 +196,14 @@ namespace BlackoutScanner.Services
             var scanTime = DateTime.UtcNow;
 
             // Use ConcurrentBag to safely collect results from parallel processing
-            var results = new System.Collections.Concurrent.ConcurrentBag<(int entityIndex, Dictionary<string, object> fields, bool hasValidData)>();
+            var results = new System.Collections.Concurrent.ConcurrentBag<(int entityIndex, Dictionary<string, object> fields, Dictionary<string, float> confidences, bool hasValidData)>();
 
             // Process entities in parallel
             Parallel.For(0, category.MaxEntityCount, new ParallelOptions { MaxDegreeOfParallelism = 4 }, entityIndex =>
             {
                 var offsetY = entityIndex * category.EntityHeightOffset;
                 var updatedFields = new Dictionary<string, object>();
+                var fieldConfidences = new Dictionary<string, float>();
                 bool hasValidData = false;
 
                 foreach (var field in category.Fields)
@@ -194,8 +226,55 @@ namespace BlackoutScanner.Services
                         break;
                     }
 
+                    // Check if this specific field has changed before performing OCR
+                    string fieldKey = $"{category.Name}_{field.Name}_row{entityIndex}";
+                    string currentFieldHash;
+                    float avgConfidence = 0f; // Declare once at loop level
+
+                    using (var fieldBitmap = gameWindowBitmap.Clone(offsetFieldBounds, gameWindowBitmap.PixelFormat))
+                    {
+                        currentFieldHash = ocrProcessor.GenerateImageHash(
+                            ocrProcessor.ConvertBitmapToBitmapImage(fieldBitmap)
+                        );
+
+                        // Check if this field has changed
+                        if (previousFieldHashes.TryGetValue(fieldKey, out var prevFieldHash) &&
+                            prevFieldHash == currentFieldHash)
+                        {
+                            Log.Debug($"Scanner: Multi-entity field '{field.Name}' row {entityIndex} unchanged (hash match), retrieving cached OCR result");
+
+                            // Get cached OCR result to retrieve both text and confidence
+                            OCRResult cachedResult = ocrProcessor.ProcessImage(fieldBitmap, category.Name, $"{field.Name}_row{entityIndex}");
+                            updatedFields[field.Name] = cachedResult.Text;
+
+                            // Calculate and store average confidence from cached result
+                            avgConfidence = cachedResult.WordConfidences.Any()
+                                ? (float)cachedResult.WordConfidences.Average(wc => wc.Confidence)
+                                : 0f;
+                            fieldConfidences[field.Name] = avgConfidence;
+
+                            // Check if this field has any data
+                            if (!string.IsNullOrWhiteSpace(cachedResult.Text))
+                            {
+                                hasValidData = true;
+                            }
+
+                            continue;
+                        }
+
+                        // Store the new hash
+                        previousFieldHashes[fieldKey] = currentFieldHash;
+                        Log.Debug($"Scanner: Multi-entity field '{field.Name}' row {entityIndex} changed (new hash), performing OCR");
+                    }
+
                     OCRResult fieldResult = ProcessArea(gameWindowBitmap, offsetFieldBounds, false, category.Name, $"{field.Name}_row{entityIndex}");
                     updatedFields[field.Name] = fieldResult.Text;
+
+                    // Calculate and store average confidence for this field
+                    avgConfidence = fieldResult.WordConfidences.Any()
+                        ? (float)fieldResult.WordConfidences.Average(wc => wc.Confidence)
+                        : 0f;
+                    fieldConfidences[field.Name] = avgConfidence;
 
                     // Check if this field has any data
                     if (!string.IsNullOrWhiteSpace(fieldResult.Text))
@@ -211,7 +290,7 @@ namespace BlackoutScanner.Services
                 }
 
                 // Add the result to our concurrent collection
-                results.Add((entityIndex, updatedFields, hasValidData));
+                results.Add((entityIndex, updatedFields, fieldConfidences, hasValidData));
             });
 
             // Process results sequentially to ensure consistent data handling
@@ -222,6 +301,7 @@ namespace BlackoutScanner.Services
                     var dataRecord = new DataRecord
                     {
                         Fields = new Dictionary<string, object>(result.fields),
+                        FieldConfidences = result.confidences,
                         ScanDate = scanTime,
                         Category = category.Name,
                         GameProfile = activeProfile.ProfileName,
@@ -257,16 +337,61 @@ namespace BlackoutScanner.Services
 
             var dataRecord = new DataRecord();
             var updatedFields = new Dictionary<string, object>();
+            var fieldConfidences = new Dictionary<string, float>();
 
             foreach (var field in category.Fields)
             {
                 // Convert relative bounds to absolute for this window size
                 var fieldAbsoluteBounds = field.RelativeBounds.ToAbsolute(containerRect);
 
+                // Check if this specific field has changed before performing OCR
+                string fieldKey = $"{category.Name}_{field.Name}";
+                string currentFieldHash;
+                float avgConfidence = 0f; // Declare once at loop level
+
+                using (var fieldBitmap = gameWindowBitmap.Clone(fieldAbsoluteBounds, gameWindowBitmap.PixelFormat))
+                {
+                    currentFieldHash = ocrProcessor.GenerateImageHash(
+                        ocrProcessor.ConvertBitmapToBitmapImage(fieldBitmap)
+                    );
+
+                    // Check if this field has changed
+                    if (previousFieldHashes.TryGetValue(fieldKey, out var prevFieldHash) &&
+                        prevFieldHash == currentFieldHash)
+                    {
+                        // Field hasn't changed, retrieve cached OCR result for confidence
+                        Log.Debug($"Scanner: Field '{field.Name}' unchanged (hash match), retrieving cached OCR result");
+
+                        // Get cached OCR result to retrieve both text and confidence
+                        OCRResult cachedResult = ocrProcessor.ProcessImage(fieldBitmap, category.Name, field.Name);
+                        updatedFields[field.Name] = cachedResult.Text;
+
+                        // Calculate and store average confidence from cached result
+                        avgConfidence = cachedResult.WordConfidences.Any()
+                            ? (float)cachedResult.WordConfidences.Average(wc => wc.Confidence)
+                            : 0f;
+                        fieldConfidences[field.Name] = avgConfidence;
+
+                        Log.Debug($"Field '{field.Name}' cached result: '{cachedResult.Text}' (Confidence: {avgConfidence:F2})");
+
+                        continue;
+                    }
+
+                    // Store the new hash
+                    previousFieldHashes[fieldKey] = currentFieldHash;
+                    Log.Debug($"Scanner: Field '{field.Name}' changed (new hash), performing OCR");
+                }
+
                 OCRResult fieldResult = ProcessArea(gameWindowBitmap, fieldAbsoluteBounds, false, category.Name, field.Name);
                 updatedFields[field.Name] = fieldResult.Text;
 
-                Log.Debug($"Field '{field.Name}' OCR result: '{fieldResult.Text}' (IsKeyField: {field.IsKeyField})");
+                // Calculate and store average confidence for this field
+                avgConfidence = fieldResult.WordConfidences.Any()
+                    ? (float)fieldResult.WordConfidences.Average(wc => wc.Confidence)
+                    : 0f;
+                fieldConfidences[field.Name] = avgConfidence;
+
+                Log.Debug($"Field '{field.Name}' OCR result: '{fieldResult.Text}' (Confidence: {avgConfidence:F2}, IsKeyField: {field.IsKeyField})");
 
                 using (var fieldBitmap = gameWindowBitmap.Clone(fieldAbsoluteBounds, gameWindowBitmap.PixelFormat))
                 {
@@ -276,6 +401,7 @@ namespace BlackoutScanner.Services
 
             // IMPORTANT: Copy the updatedFields to dataRecord.Fields
             dataRecord.Fields = new Dictionary<string, object>(updatedFields);
+            dataRecord.FieldConfidences = fieldConfidences;
             dataRecord.ScanDate = DateTime.UtcNow;
             dataRecord.Category = category.Name; // Add category name
             dataRecord.GameProfile = activeProfile.ProfileName; // Add profile name
@@ -285,6 +411,7 @@ namespace BlackoutScanner.Services
             // Log the data record details before saving
             Log.Debug($"DataRecord created - Category: {dataRecord.Category}, Profile: {dataRecord.GameProfile}");
             Log.Debug($"DataRecord fields: {string.Join(", ", dataRecord.Fields.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");
+            Log.Debug($"DataRecord confidence scores: {string.Join(", ", dataRecord.FieldConfidences.Select(kvp => $"{kvp.Key}={kvp.Value:F2}"))}");
 
             // Log key fields for debugging
             var keyFields = category.Fields.Where(f => f.IsKeyField).Select(f => f.Name).ToList();

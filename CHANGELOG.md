@@ -1,6 +1,18 @@
 ```markdown
 # Blackout Scanner Changelog
 
+## [2.0.6] - 2025-10-02
+
+### Added
+- Smart change detection to skip OCR processing when screen content is unchanged
+- Hash-based tracking of category and field areas for efficient change detection
+
+### Fixed
+- Excessive CPU usage when game screen is static
+- Application crashes during Tesseract OCR engine initialization (AccessViolationException)
+- Thread-safety issues with concurrent engine creation
+- Memory corruption when initializing multiple OCR engines simultaneously
+
 ## [2.0.5] - 2025-08-18
 
 ### Added

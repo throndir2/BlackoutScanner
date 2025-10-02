@@ -412,6 +412,47 @@ namespace BlackoutScanner.Views
                     }
 
                     dataGrid.Columns.Add(column);
+
+                    // Add confidence column for this field
+                    var confidenceColumn = new DataGridTextColumn
+                    {
+                        Header = $"{field.Name} (%)",
+                        Binding = new System.Windows.Data.Binding($"FieldConfidences[{field.Name}]")
+                        {
+                            StringFormat = "{0:F1}",
+                            TargetNullValue = "N/A"
+                        },
+                        Width = DataGridLength.Auto,
+                        MinWidth = 60,
+                        IsReadOnly = true
+                    };
+
+                    // Style the confidence column to show low confidence in red
+                    var style = new Style(typeof(DataGridCell));
+                    var trigger = new DataTrigger
+                    {
+                        Binding = new System.Windows.Data.Binding($"FieldConfidences[{field.Name}]"),
+                        Value = null
+                    };
+                    style.Triggers.Add(trigger);
+
+                    // Add a style trigger for low confidence (< 70%)
+                    var lowConfidenceTrigger = new DataTrigger
+                    {
+                        Binding = new System.Windows.Data.Binding($"FieldConfidences[{field.Name}]")
+                    };
+                    // We'll use a converter or direct value comparison
+                    var setter = new Setter(DataGridCell.ForegroundProperty, Brushes.Red);
+
+                    confidenceColumn.CellStyle = new Style(typeof(DataGridCell))
+                    {
+                        Setters =
+                        {
+                            new Setter(DataGridCell.ToolTipProperty, "OCR Confidence Score (0-100%)")
+                        }
+                    };
+
+                    dataGrid.Columns.Add(confidenceColumn);
                 }
 
                 // Add ScanDate column

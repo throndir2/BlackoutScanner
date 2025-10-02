@@ -7,6 +7,7 @@ namespace BlackoutScanner.Models
     public class DataRecord
     {
         public Dictionary<string, object> Fields { get; set; } = new Dictionary<string, object>();
+        public Dictionary<string, float> FieldConfidences { get; set; } = new Dictionary<string, float>();
         public DateTime ScanDate { get; set; }
         public string Category { get; set; } = string.Empty;
         public string GameProfile { get; set; } = string.Empty;
