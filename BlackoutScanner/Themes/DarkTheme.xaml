@@ -75,6 +75,19 @@
                         Value="5"/>
         </Style>
 
+        <Style TargetType="PasswordBox">
+                <Setter Property="Background"
+                        Value="{StaticResource TextBoxBackgroundBrush}"/>
+                <Setter Property="Foreground"
+                        Value="{StaticResource ForegroundBrush}"/>
+                <Setter Property="BorderBrush"
+                        Value="{StaticResource TextBoxBorderBrush}"/>
+                <Setter Property="BorderThickness"
+                        Value="1"/>
+                <Setter Property="Padding"
+                        Value="5"/>
+        </Style>
+
         <Style TargetType="Button">
                 <Setter Property="Background"
                         Value="{StaticResource AccentBrush}"/>
@@ -115,13 +128,15 @@
                                                 </Trigger>
                                                 <Trigger Property="IsMouseOver"
                                                          Value="True">
-                                                        <Setter Property="Background"
-                                                                Value="{StaticResource ButtonHoverBackgroundBrush}"/>
+                                                        <Setter Property="Opacity"
+                                                                Value="0.85"/>
+                                                        <Setter Property="Cursor"
+                                                                Value="Hand"/>
                                                 </Trigger>
                                                 <Trigger Property="IsPressed"
                                                          Value="True">
-                                                        <Setter Property="Background"
-                                                                Value="{StaticResource ButtonPressBackgroundBrush}"/>
+                                                        <Setter Property="Opacity"
+                                                                Value="0.7"/>
                                                 </Trigger>
                                         </ControlTemplate.Triggers>
                                 </ControlTemplate>

@@ -13,6 +13,7 @@
         Icon="../Assets/Images/Icon.512.ico">
         <Window.Resources>
                 <converters:ProfileComparisonConverter x:Key="ProfileComparisonConverter"/>
+                <converters:NullToBoolConverter x:Key="NullToBoolConverter"/>
         </Window.Resources>
 
         <Grid>
@@ -323,7 +324,7 @@
                                                                           Grid.Column="0"
                                                                           Grid.ColumnSpan="2"
                                                                           x:Name="useMultiEngineOCRCheckBox"
-                                                                          Content="Enhanced OCR Accuracy (slower)"
+                                                                          Content="Multi-Engine Tesseract Mode (slower)"
                                                                           ToolTip="When enabled, uses multiple language engines for better accuracy at the cost of speed. When disabled, uses a single combined engine for faster processing."
                                                                           Margin="0,5,0,5"
                                                                           Click="OCRSettings_Changed"/>
@@ -342,7 +343,7 @@
                                                                                 Maximum="100"
                                                                                 Value="80"
                                                                                 Width="200"
-                                                                                TickFrequency="10"
+                                                                                TickFrequency="5"
                                                                                 IsSnapToTickEnabled="True"
                                                                                 ValueChanged="OCRConfidenceSlider_Changed"/>
                                                                         <TextBlock Text="{Binding ElementName=ocrConfidenceSlider, Path=Value, StringFormat={}{0:F0}%}"
@@ -393,7 +394,7 @@
                                                         </Grid>
                                                 </Expander>
 
-                                                <!-- AI Enhancement Settings (New) -->
+                                                <!-- AI Enhancement Settings -->
                                                 <Expander Grid.Row="3"
                                                           Header="AI Enhancement Settings"
                                                           IsExpanded="{Binding Path=SettingsManager.Settings.AISettingsExpanded, Mode=TwoWay}"
@@ -404,135 +405,122 @@
                                                                 <Grid.RowDefinitions>
                                                                         <RowDefinition Height="Auto"/>
                                                                         <RowDefinition Height="Auto"/>
-                                                                        <RowDefinition Height="Auto"/>
-                                                                        <RowDefinition Height="Auto"/>
-                                                                        <RowDefinition Height="Auto"/>
-                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="*"/>
                                                                 </Grid.RowDefinitions>
-                                                                <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="Auto"
-                                                                                        MinWidth="150"/>
-                                                                        <ColumnDefinition Width="*"/>
-                                                                        <ColumnDefinition Width="Auto"/>
-                                                                </Grid.ColumnDefinitions>
 
                                                                 <!-- Enable AI Enhancement -->
                                                                 <CheckBox Grid.Row="0"
-                                                                          Grid.Column="0"
-                                                                          Grid.ColumnSpan="3"
                                                                           x:Name="useAIEnhancedOCRCheckBox"
-                                                                          Content="Enable AI-Enhanced OCR (requires API key)"
-                                                                          ToolTip="When enabled, uses AI services to improve OCR accuracy for low-confidence results"
+                                                                          Content="Enable AI-Enhanced OCR"
+                                                                          ToolTip="When enabled, uses configured AI providers to improve OCR accuracy for low-confidence results"
                                                                           IsChecked="{Binding Path=SettingsManager.Settings.UseAIEnhancedOCR, Mode=TwoWay}"
-                                                                          Margin="0,5,0,10"
+                                                                          Margin="0,0,0,10"
                                                                           Checked="AISettings_Changed"
                                                                           Unchecked="AISettings_Changed"/>
 
-                                                                <!-- AI Provider Selection -->
+                                                                <!-- Info Text -->
                                                                 <TextBlock Grid.Row="1"
-                                                                           Grid.Column="0"
-                                                                           Text="AI Provider:"
-                                                                           VerticalAlignment="Center"
-                                                                           Margin="0,5,10,5"/>
-                                                                <ComboBox Grid.Row="1"
-                                                                          Grid.Column="1"
-                                                                          x:Name="aiProviderComboBox"
-                                                                          IsEnabled="{Binding ElementName=useAIEnhancedOCRCheckBox, Path=IsChecked}"
-                                                                          SelectedValue="{Binding Path=SettingsManager.Settings.AIProvider, Mode=TwoWay}"
-                                                                          SelectedValuePath="Tag"
-                                                                          SelectionChanged="AIProviderComboBox_SelectionChanged"
-                                                                          Margin="0,5,0,5">
-                                                                        <ComboBoxItem Content="None"
-                                                                                        Tag="None"/>
-                                                                        <ComboBoxItem Content="NVIDIA Build"
-                                                                                        Tag="NvidiaBuild"/>
-                                                                        <ComboBoxItem Content="OpenAI (Coming Soon)"
-                                                                                        Tag="OpenAI"
-                                                                                        IsEnabled="False"/>
-                                                                        <ComboBoxItem Content="Google Gemini (Coming Soon)"
-                                                                                        Tag="Gemini"
-                                                                                        IsEnabled="False"/>
-                                                                        <ComboBoxItem Content="Custom Endpoint (Coming Soon)"
-                                                                                        Tag="Custom"
-                                                                                        IsEnabled="False"/>
-                                                                </ComboBox>
+                                                                           Text="AI providers are tried in priority order until confidence threshold is met. Configure providers below:"
+                                                                           Foreground="Gray"
+                                                                           FontSize="11"
+                                                                           TextWrapping="Wrap"
+                                                                           Margin="0,0,0,10"/>
 
-                                                                <!-- NVIDIA Build Settings -->
-                                                                <GroupBox Grid.Row="2"
-                                                                          Grid.Column="0"
-                                                                          Grid.ColumnSpan="3"
-                                                                          Header="NVIDIA Build Settings"
-                                                                          x:Name="nvidiaSettingsGroup"
-                                                                          Visibility="Collapsed"
-                                                                          Margin="0,10,0,5">
-                                                                        <Grid Margin="5">
+                                                                <!-- AI Providers Management -->
+                                                                <Border Grid.Row="2"
+                                                                        BorderBrush="#BDC3C7"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="3"
+                                                                        Padding="10">
+                                                                        <Grid>
                                                                                 <Grid.RowDefinitions>
                                                                                         <RowDefinition Height="Auto"/>
-                                                                                        <RowDefinition Height="Auto"/>
+                                                                                        <RowDefinition Height="*"
+                                                                                                       MinHeight="150"
+                                                                                                       MaxHeight="300"/>
                                                                                         <RowDefinition Height="Auto"/>
                                                                                 </Grid.RowDefinitions>
-                                                                                <Grid.ColumnDefinitions>
-                                                                                        <ColumnDefinition Width="Auto"
-                                                                                                        MinWidth="100"/>
-                                                                                        <ColumnDefinition Width="*"/>
-                                                                                </Grid.ColumnDefinitions>
 
-                                                                                <!-- API Key -->
+                                                                                <!-- Header -->
                                                                                 <TextBlock Grid.Row="0"
-                                                                                           Grid.Column="0"
-                                                                                           Text="API Key:"
-                                                                                           VerticalAlignment="Center"
-                                                                                           Margin="0,5,10,5"/>
-                                                                                <PasswordBox Grid.Row="0"
-                                                                                             Grid.Column="1"
-                                                                                             x:Name="nvidiaApiKeyBox"
-                                                                                             PasswordChanged="NvidiaApiKey_Changed"
-                                                                                             Margin="0,5,0,5"/>
+                                                                                           Text="Configured AI Providers"
+                                                                                           FontWeight="SemiBold"
+                                                                                           Margin="0,0,0,10"/>
 
-                                                                                <!-- Model Selection -->
-                                                                                <TextBlock Grid.Row="1"
-                                                                                           Grid.Column="0"
-                                                                                           Text="Model:"
-                                                                                           VerticalAlignment="Center"
-                                                                                           Margin="0,5,10,5"/>
-                                                                                <ComboBox Grid.Row="1"
-                                                                                          Grid.Column="1"
-                                                                                          x:Name="nvidiaModelComboBox"
-                                                                                          SelectedValue="{Binding Path=SettingsManager.Settings.NvidiaModel, Mode=TwoWay}"
-                                                                                          SelectedValuePath="Tag"
-                                                                                          SelectionChanged="NvidiaModel_SelectionChanged"
-                                                                                          Margin="0,5,0,5">
-                                                                                        <ComboBoxItem Content="Microsoft Kosmos-2 (General Vision)"
-                                                                                                        Tag="microsoft/kosmos-2"/>
-                                                                                        <ComboBoxItem Content="PaddleOCR (Text Detection)"
-                                                                                                        Tag="nvidia/paddleocr"/>
-                                                                                        <ComboBoxItem Content="Nemo Retriever OCR v1 (Document OCR)"
-                                                                                                        Tag="nvidia/nemoretriever-ocr-v1"/>
-                                                                                </ComboBox>
+                                                                                <!-- Providers DataGrid -->
+                                                                                <DataGrid Grid.Row="1"
+                                                                                          x:Name="aiProvidersDataGrid"
+                                                                                          ItemsSource="{Binding Path=SettingsManager.Settings.AIProviders}"
+                                                                                          AutoGenerateColumns="False"
+                                                                                          CanUserAddRows="False"
+                                                                                          CanUserDeleteRows="False"
+                                                                                          GridLinesVisibility="Horizontal"
+                                                                                          HeadersVisibility="Column"
+                                                                                          SelectionMode="Single"
+                                                                                          IsReadOnly="True"
+                                                                                          Margin="0,0,0,10">
+                                                                                        <DataGrid.Columns>
+                                                                                                <DataGridCheckBoxColumn Header="Enabled"
+                                                                                                                        Binding="{Binding IsEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                                                                        Width="60"
+                                                                                                                        IsReadOnly="False"
+                                                                                                                        ElementStyle="{StaticResource DataGridCheckBoxStyle}"
+                                                                                                                        EditingElementStyle="{StaticResource DataGridCheckBoxStyle}"/>
+                                                                                                <DataGridTextColumn Header="Priority"
+                                                                                                                    Binding="{Binding Priority}"
+                                                                                                                    Width="60"/>
+                                                                                                <DataGridTextColumn Header="Display Name"
+                                                                                                                    Binding="{Binding DisplayName}"
+                                                                                                                    Width="*"
+                                                                                                                    MinWidth="120"/>
+                                                                                                <DataGridTextColumn Header="Provider"
+                                                                                                                    Binding="{Binding ProviderType}"
+                                                                                                                    Width="100"/>
+                                                                                                <DataGridTextColumn Header="Model"
+                                                                                                                    Binding="{Binding Model}"
+                                                                                                                    Width="150"/>
+                                                                                                <DataGridTextColumn Header="RPM"
+                                                                                                                    Binding="{Binding RequestsPerMinute}"
+                                                                                                                    Width="60"/>
+                                                                                        </DataGrid.Columns>
+                                                                                </DataGrid>
 
-                                                                                <!-- Test Connection Button -->
-                                                                                <Button Grid.Row="2"
-                                                                                        Grid.Column="0"
-                                                                                        Grid.ColumnSpan="2"
-                                                                                        Content="Test Connection"
-                                                                                        x:Name="testNvidiaConnectionButton"
-                                                                                        Click="TestNvidiaConnection_Click"
-                                                                                        Margin="0,10,0,5"
-                                                                                        HorizontalAlignment="Center"
-                                                                                        Width="150"/>
+                                                                                <!-- Action Buttons -->
+                                                                                <StackPanel Grid.Row="2"
+                                                                                            Orientation="Horizontal"
+                                                                                            HorizontalAlignment="Left">
+                                                                                        <Button Content="Add Provider"
+                                                                                                Click="AddAIProvider_Click"
+                                                                                                Padding="10,5"
+                                                                                                Margin="0,0,5,0"
+                                                                                                Background="#27AE60"
+                                                                                                Foreground="White"
+                                                                                                BorderThickness="0"/>
+                                                                                        <Button Content="Edit"
+                                                                                                Click="EditAIProvider_Click"
+                                                                                                Padding="10,5"
+                                                                                                Margin="0,0,5,0"
+                                                                                                IsEnabled="{Binding ElementName=aiProvidersDataGrid, Path=SelectedItem, Converter={StaticResource NullToBoolConverter}}"/>
+                                                                                        <Button Content="Delete"
+                                                                                                Click="DeleteAIProvider_Click"
+                                                                                                Padding="10,5"
+                                                                                                Margin="0,0,5,0"
+                                                                                                Background="#E74C3C"
+                                                                                                Foreground="White"
+                                                                                                BorderThickness="0"
+                                                                                                IsEnabled="{Binding ElementName=aiProvidersDataGrid, Path=SelectedItem, Converter={StaticResource NullToBoolConverter}}"/>
+                                                                                        <Button Content="Move Up"
+                                                                                                Click="MoveProviderUp_Click"
+                                                                                                Padding="10,5"
+                                                                                                Margin="0,0,5,0"
+                                                                                                IsEnabled="{Binding ElementName=aiProvidersDataGrid, Path=SelectedItem, Converter={StaticResource NullToBoolConverter}}"/>
+                                                                                        <Button Content="Move Down"
+                                                                                                Click="MoveProviderDown_Click"
+                                                                                                Padding="10,5"
+                                                                                                IsEnabled="{Binding ElementName=aiProvidersDataGrid, Path=SelectedItem, Converter={StaticResource NullToBoolConverter}}"/>
+                                                                                </StackPanel>
                                                                         </Grid>
-                                                                </GroupBox>
-
-                                                                <!-- Status/Info Text -->
-                                                                <TextBlock Grid.Row="5"
-                                                                           Grid.Column="0"
-                                                                           Grid.ColumnSpan="3"
-                                                                           x:Name="aiStatusText"
-                                                                           Text="AI enhancement is disabled"
-                                                                           Foreground="Gray"
-                                                                           FontStyle="Italic"
-                                                                           Margin="0,10,0,0"
-                                                                           TextWrapping="Wrap"/>
+                                                                </Border>
                                                         </Grid>
                                                 </Expander>
 

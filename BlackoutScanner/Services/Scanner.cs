@@ -157,6 +157,20 @@ namespace BlackoutScanner.Services
 
                         // Store the new hash for next comparison
                         previousCategoryHashes[category.Name] = categoryHash;
+
+                        // CRITICAL: Clear field-level hashes for this category to prevent race conditions
+                        // when rapidly switching between different entities (e.g., different players)
+                        var keysToRemove = previousFieldHashes.Keys
+                            .Where(k => k.StartsWith($"{category.Name}_"))
+                            .ToList();
+                        foreach (var key in keysToRemove)
+                        {
+                            previousFieldHashes.Remove(key);
+                        }
+                        if (keysToRemove.Count > 0)
+                        {
+                            Log.Debug($"Scanner: Category '{category.Name}' changed - cleared {keysToRemove.Count} field hash(es) to prevent cross-entity data contamination");
+                        }
                     }
 
                     // Check if this category matches based on its comparison mode
@@ -355,6 +369,9 @@ namespace BlackoutScanner.Services
             var updatedFields = new Dictionary<string, object>();
             var fieldConfidences = new Dictionary<string, float>();
 
+            // Track fields that need AI enhancement and their metadata
+            var aiEnhancementQueue = new List<(string fieldName, OCRResult fieldResult, Rectangle bounds, float avgConfidence)>();
+
             foreach (var field in category.Fields)
             {
                 // Convert relative bounds to absolute for this window size
@@ -409,7 +426,7 @@ namespace BlackoutScanner.Services
 
                 Log.Debug($"Field '{field.Name}' OCR result: '{fieldResult.Text}' (Confidence: {avgConfidence:F2}, IsKeyField: {field.IsKeyField})");
 
-                // Check if we should enqueue for AI enhancement
+                // Check if we should enqueue for AI enhancement LATER (after record creation)
                 if (settingsManager != null && aiQueueProcessor != null)
                 {
                     bool useAIEnhancement = settingsManager.Settings.UseAIEnhancedOCR;
@@ -419,42 +436,8 @@ namespace BlackoutScanner.Services
 
                     if (useAIEnhancement && avgConfidence < confidenceThreshold)
                     {
-                        Log.Information($"[Scanner] ENQUEUING low-confidence OCR result for AI enhancement: Category='{category.Name}', Field='{field.Name}', Text='{fieldResult.Text}', Confidence={avgConfidence:F2}, TesseractTime={fieldResult.ProcessingTimeMs}ms");
-
-                        try
-                        {
-                            // Capture the field image as byte array
-                            using (var fieldBitmap = gameWindowBitmap.Clone(fieldAbsoluteBounds, gameWindowBitmap.PixelFormat))
-                            using (var ms = new System.IO.MemoryStream())
-                            {
-                                fieldBitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                                var imageData = ms.ToArray();
-
-                                // Generate image hash for cache lookup
-                                var bitmapImage = ocrProcessor.ConvertBitmapToBitmapImage(fieldBitmap);
-                                var imageHash = ocrProcessor.GenerateImageHash(bitmapImage);
-
-                                var queueItem = new AIOCRQueueItem
-                                {
-                                    ImageData = imageData,
-                                    OriginalResult = fieldResult,
-                                    CategoryName = category.Name,
-                                    FieldName = field.Name,
-                                    ImageHash = imageHash,
-                                    AIProvider = settingsManager.Settings.AIProvider,
-                                    QueuedAt = DateTime.UtcNow
-                                };
-
-                                Log.Debug($"[Scanner] Queue item created with OriginalResult.ProcessingTimeMs={queueItem.OriginalResult.ProcessingTimeMs}ms, ImageHash={imageHash}");
-
-                                aiQueueProcessor.Enqueue(queueItem);
-                                Log.Information($"[Scanner] Successfully enqueued item to AI queue. Current queue size: {aiQueueProcessor.QueueCount}");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Error(ex, $"[Scanner] Failed to enqueue item to AI queue for field '{field.Name}'");
-                        }
+                        // Queue this field for AI enhancement AFTER we create the record
+                        aiEnhancementQueue.Add((field.Name, fieldResult, fieldAbsoluteBounds, avgConfidence));
                     }
                     else if (!useAIEnhancement)
                     {
@@ -521,7 +504,57 @@ namespace BlackoutScanner.Services
             DataUpdated?.Invoke(updatedFields);
             ScanDateUpdated?.Invoke(dataRecord.ScanDate);
 
+            // Save the record and get its hash
             dataManager.AddOrUpdateRecord(dataRecord, activeProfile);
+
+            // NOW enqueue low-confidence fields for AI enhancement WITH the record hash
+            // This ensures we know which specific record these fields belong to
+            if (aiEnhancementQueue.Any())
+            {
+                // Generate the hash for this specific record
+                var recordHash = dataManager.GenerateDataHash(dataRecord, activeProfile);
+                Log.Debug($"[Scanner] Record hash generated: {recordHash}, enqueueing {aiEnhancementQueue.Count} field(s) for AI enhancement");
+
+                foreach (var (fieldName, fieldResult, bounds, avgConfidence) in aiEnhancementQueue)
+                {
+                    Log.Information($"[Scanner] ENQUEUING low-confidence OCR result for AI enhancement: Category='{category.Name}', Field='{fieldName}', Text='{fieldResult.Text}', Confidence={avgConfidence:F2}, TesseractTime={fieldResult.ProcessingTimeMs}ms, RecordHash='{recordHash}'");
+
+                    try
+                    {
+                        // Capture the field image as byte array
+                        using (var fieldBitmap = gameWindowBitmap.Clone(bounds, gameWindowBitmap.PixelFormat))
+                        using (var ms = new System.IO.MemoryStream())
+                        {
+                            fieldBitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                            var imageData = ms.ToArray();
+
+                            // Generate image hash for cache lookup
+                            var bitmapImage = ocrProcessor.ConvertBitmapToBitmapImage(fieldBitmap);
+                            var imageHash = ocrProcessor.GenerateImageHash(bitmapImage);
+
+                            var queueItem = new AIOCRQueueItem
+                            {
+                                ImageData = imageData,
+                                OriginalResult = fieldResult,
+                                CategoryName = category.Name,
+                                FieldName = fieldName,
+                                ImageHash = imageHash,
+                                RecordHash = recordHash, // CRITICAL: Associate with specific record
+                                QueuedAt = DateTime.UtcNow
+                            };
+
+                            Log.Debug($"[Scanner] Queue item created with OriginalResult.ProcessingTimeMs={queueItem.OriginalResult.ProcessingTimeMs}ms, ImageHash={imageHash}, RecordHash={recordHash}");
+
+                            aiQueueProcessor.Enqueue(queueItem);
+                            Log.Information($"[Scanner] Successfully enqueued item to AI queue. Current queue size: {aiQueueProcessor.QueueCount}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, $"[Scanner] Failed to enqueue item to AI queue for field '{fieldName}'");
+                    }
+                }
+            }
         }
 
         private OCRResult ProcessArea(Bitmap gameWindowBitmap, Rectangle area, bool numericalOnly = false, string category = "", string fieldName = "")

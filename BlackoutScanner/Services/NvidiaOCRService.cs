@@ -3,6 +3,7 @@ using BlackoutScanner.Models;
 using Newtonsoft.Json;
 using Serilog;
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,8 +12,9 @@ namespace BlackoutScanner.Services
 {
     /// <summary>
     /// Service for interacting with NVIDIA Build AI OCR APIs.
+    /// Supports PaddleOCR and NeMo Retriever OCR models.
     /// </summary>
-    public class NvidiaAIService : INvidiaAIService
+    public class NvidiaOCRService : INvidiaOCRService
     {
         private readonly HttpClient _httpClient;
         private string _apiKey;
@@ -20,14 +22,6 @@ namespace BlackoutScanner.Services
 
         // Base URL for NVIDIA Build API
         private const string BaseUrl = "https://ai.api.nvidia.com/v1/cv";
-
-        // Model endpoint mappings
-        private static readonly Dictionary<string, string> ModelEndpoints = new()
-        {
-            { "microsoft/kosmos-2", "microsoft/kosmos-2" },
-            { "nvidia/paddleocr", "baidu/paddleocr" },
-            { "nvidia/nemoretriever-ocr-v1", "nvidia/nemoretriever-ocr-v1" }
-        };
 
         // Maximum base64 image size (180KB as per NVIDIA docs)
         private const int MaxImageSizeBase64 = 180_000;
@@ -46,19 +40,19 @@ namespace BlackoutScanner.Services
             set => _model = value;
         }
 
-        public NvidiaAIService()
+        public NvidiaOCRService()
         {
             _httpClient = new HttpClient();
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
             _apiKey = string.Empty;
-            _model = "microsoft/kosmos-2";
+            _model = "baidu/paddleocr";
         }
 
         public void UpdateConfiguration(string apiKey, string model)
         {
             _apiKey = apiKey;
             _model = model;
-            Log.Information($"NVIDIA AI Service configuration updated: Model={model}");
+            Log.Information($"NVIDIA OCR Service configuration updated: Model={model}");
         }
 
         public bool IsConfigured()
@@ -70,7 +64,7 @@ namespace BlackoutScanner.Services
         {
             if (!IsConfigured())
             {
-                Log.Warning("NVIDIA AI Service is not properly configured");
+                Log.Warning("NVIDIA OCR Service is not properly configured");
                 return false;
             }
 
@@ -94,12 +88,12 @@ namespace BlackoutScanner.Services
 
                 var response = await SendRequestAsync(invokeUrl, request);
 
-                Log.Information("NVIDIA AI Service connection test successful");
+                Log.Information("NVIDIA OCR Service connection test successful");
                 return response != null && !response.HasError;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "NVIDIA AI Service connection test failed");
+                Log.Error(ex, "NVIDIA OCR Service connection test failed");
                 return false;
             }
         }
@@ -108,7 +102,7 @@ namespace BlackoutScanner.Services
         {
             if (!IsConfigured())
             {
-                throw new InvalidOperationException("NVIDIA AI Service is not properly configured. Please set API key and model.");
+                throw new InvalidOperationException("NVIDIA OCR Service is not properly configured. Please set API key and model.");
             }
 
             if (imageData == null || imageData.Length == 0)
@@ -164,20 +158,13 @@ namespace BlackoutScanner.Services
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to perform OCR using NVIDIA AI Service");
+                Log.Error(ex, "Failed to perform OCR using NVIDIA OCR Service");
                 throw;
             }
         }
 
         private string GetInvokeUrl()
         {
-            if (ModelEndpoints.TryGetValue(_model, out var endpoint))
-            {
-                return $"{BaseUrl}/{endpoint}";
-            }
-
-            // Fallback: use the model name as-is
-            Log.Warning($"Unknown model '{_model}', using as-is for endpoint");
             return $"{BaseUrl}/{_model}";
         }
 

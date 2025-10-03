@@ -19,9 +19,12 @@ namespace BlackoutScanner.ViewModels
         private int _processedCount;
         private int _successCount;
         private int _failedCount;
+        private int _appliedCount;
+        private int _rejectedCount;
         private double _averageTesseractMs;
         private double _averageAIMs;
         private double _successRate;
+        private double _applicationRate;
         private string _statusMessage;
 
         public ObservableCollection<AIOCRQueueItem> PendingItems { get; }
@@ -51,6 +54,18 @@ namespace BlackoutScanner.ViewModels
             set { _failedCount = value; OnPropertyChanged(); }
         }
 
+        public int AppliedCount
+        {
+            get => _appliedCount;
+            set { _appliedCount = value; OnPropertyChanged(); }
+        }
+
+        public int RejectedCount
+        {
+            get => _rejectedCount;
+            set { _rejectedCount = value; OnPropertyChanged(); }
+        }
+
         public double AverageTesseractMs
         {
             get => _averageTesseractMs;
@@ -67,6 +82,12 @@ namespace BlackoutScanner.ViewModels
         {
             get => _successRate;
             set { _successRate = value; OnPropertyChanged(); }
+        }
+
+        public double ApplicationRate
+        {
+            get => _applicationRate;
+            set { _applicationRate = value; OnPropertyChanged(); }
         }
 
         public string StatusMessage
@@ -127,6 +148,16 @@ namespace BlackoutScanner.ViewModels
                 if (result.Success)
                 {
                     SuccessCount++;
+
+                    // Track application status
+                    if (result.WasApplied)
+                    {
+                        AppliedCount++;
+                    }
+                    else
+                    {
+                        RejectedCount++;
+                    }
                 }
                 else
                 {
@@ -171,7 +202,10 @@ namespace BlackoutScanner.ViewModels
             // Calculate success rate
             SuccessRate = (double)SuccessCount / ProcessedCount * 100;
 
-            Log.Debug($"[AIQueueMonitorViewModel] RecalculateMetrics: TesseractSamples={tesseractTimes.Count()}, Avg={AverageTesseractMs:F2}ms, AISamples={aiTimes.Count()}, Avg={AverageAIMs:F2}ms, SuccessRate={SuccessRate:F1}%");
+            // Calculate application rate (percentage of successful results that were applied)
+            ApplicationRate = SuccessCount > 0 ? (double)AppliedCount / SuccessCount * 100 : 0;
+
+            Log.Debug($"[AIQueueMonitorViewModel] RecalculateMetrics: TesseractSamples={tesseractTimes.Count()}, Avg={AverageTesseractMs:F2}ms, AISamples={aiTimes.Count()}, Avg={AverageAIMs:F2}ms, SuccessRate={SuccessRate:F1}%, ApplicationRate={ApplicationRate:F1}%");
         }
 
         private void UpdateStatusMessage()
@@ -201,6 +235,8 @@ namespace BlackoutScanner.ViewModels
                 ProcessedCount = 0;
                 SuccessCount = 0;
                 FailedCount = 0;
+                AppliedCount = 0;
+                RejectedCount = 0;
                 RecalculateMetrics();
                 UpdateStatusMessage();
             });

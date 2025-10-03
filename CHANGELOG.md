@@ -1,6 +1,20 @@
 ```markdown
 # Blackout Scanner Changelog
 
+## [2.1.1] - 2025-10-03
+
+### Added
+- **Multi-Provider AI Support**: Configure multiple AI providers with priority-based cascade fallback
+  - Google Gemini integration with gemini-2.5-flash optimized for special characters and mixed-language text
+  - Provider management UI: add, edit, delete, reorder, and test connections
+  - Automatic settings migration from single to multi-provider format
+  - AI Queue Monitor now shows expandable cascade attempt details for each processed item
+
+### Fixed
+- Application crash on startup due to converter type mismatch in AI provider buttons
+- Inconsistent button hover behavior across dialogs and management UI
+- Dark theme compatibility issues in AI Provider Editor dialog
+
 ## [2.1.0] - 2025-10-03
 
 ### Added

@@ -45,6 +45,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
@@ -92,8 +93,26 @@
                     </TextBlock>
                 </StackPanel>
 
-                <!-- Avg Tesseract Time -->
+                <!-- Application Rate -->
                 <StackPanel Grid.Column="3"
+                            Margin="0,0,10,0">
+                    <TextBlock Text="Applied Rate"
+                               FontSize="11"
+                               Foreground="{StaticResource SecondaryForegroundBrush}"
+                               FontWeight="SemiBold"/>
+                    <TextBlock FontSize="24"
+                               FontWeight="Bold"
+                               Foreground="#2ECC71">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="{}{0:F1}%">
+                                <Binding Path="ApplicationRate"/>
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+
+                <!-- Avg Tesseract Time -->
+                <StackPanel Grid.Column="4"
                             Margin="0,0,10,0">
                     <TextBlock Text="Avg Tesseract (ms)"
                                FontSize="11"
@@ -111,7 +130,7 @@
                 </StackPanel>
 
                 <!-- Avg AI Time -->
-                <StackPanel Grid.Column="4"
+                <StackPanel Grid.Column="5"
                             Margin="0,0,10,0">
                     <TextBlock Text="Avg AI (ms)"
                                FontSize="11"
@@ -129,7 +148,7 @@
                 </StackPanel>
 
                 <!-- Clear Button -->
-                <Button Grid.Column="5"
+                <Button Grid.Column="6"
                         Content="Clear History"
                         Padding="10,5"
                         Click="ClearHistory_Click"
@@ -137,33 +156,7 @@
                         Foreground="White"
                         BorderThickness="0"
                         FontWeight="SemiBold"
-                        VerticalAlignment="Center">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                                CornerRadius="3"
-                                                Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center"
-                                                              VerticalAlignment="Center"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver"
-                                         Value="True">
-                                    <Setter Property="Background"
-                                            Value="#C0392B"/>
-                                    <Setter Property="Cursor"
-                                            Value="Hand"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                        VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -177,8 +170,209 @@
                           IsReadOnly="True"
                           GridLinesVisibility="Horizontal"
                           HeadersVisibility="Column"
-                          CanUserResizeRows="False"
+                          CanUserResizeRows="True"
                           SelectionMode="Single">
+                    <DataGrid.RowDetailsTemplate>
+                        <DataTemplate>
+                            <Border Background="#F8F9FA"
+                                    BorderBrush="#BDC3C7"
+                                    BorderThickness="0,1,0,0"
+                                    Padding="40,10,10,10"
+                                    Margin="0">
+                                <StackPanel>
+                                    <TextBlock Text="AI Cascade Attempts"
+                                               FontWeight="Bold"
+                                               FontSize="12"
+                                               Foreground="#2C3E50"
+                                               Margin="0,0,0,5"/>
+                                    <ItemsControl ItemsSource="{Binding Attempts}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border BorderBrush="#E0E0E0"
+                                                        BorderThickness="0,0,0,1"
+                                                        Padding="5"
+                                                        Margin="0,2">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="30"/>
+                                                            <ColumnDefinition Width="80"/>
+                                                            <ColumnDefinition Width="120"/>
+                                                            <ColumnDefinition Width="150"/>
+                                                            <ColumnDefinition Width="250"/>
+                                                            <ColumnDefinition Width="90"/>
+                                                            <ColumnDefinition Width="80"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <!-- Selected Indicator -->
+                                                        <TextBlock Grid.Column="0"
+                                                                   Text="✓"
+                                                                   FontWeight="Bold"
+                                                                   FontSize="14"
+                                                                   Foreground="#27AE60"
+                                                                   VerticalAlignment="Center"
+                                                                   HorizontalAlignment="Center"
+                                                                   ToolTip="Selected Result">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility"
+                                                                            Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Border}, Path=DataContext.SelectedAttemptIndex}"
+                                                                                Value="{Binding RelativeSource={RelativeSource Self}, Path=DataContext}">
+                                                                            <Setter Property="Visibility"
+                                                                                    Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+
+                                                        <!-- Priority -->
+                                                        <StackPanel Grid.Column="1">
+                                                            <TextBlock Text="Priority"
+                                                                       FontSize="9"
+                                                                       Foreground="Gray"/>
+                                                            <TextBlock Text="{Binding Priority}"
+                                                                       FontWeight="SemiBold"/>
+                                                        </StackPanel>
+
+                                                        <!-- Provider -->
+                                                        <StackPanel Grid.Column="2">
+                                                            <TextBlock Text="Provider"
+                                                                       FontSize="9"
+                                                                       Foreground="Gray"/>
+                                                            <TextBlock Text="{Binding ProviderType}"
+                                                                       FontWeight="SemiBold"/>
+                                                        </StackPanel>
+
+                                                        <!-- Model -->
+                                                        <StackPanel Grid.Column="3">
+                                                            <TextBlock Text="Model"
+                                                                       FontSize="9"
+                                                                       Foreground="Gray"/>
+                                                            <TextBlock Text="{Binding Model}"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                        </StackPanel>
+
+                                                        <!-- Extracted Text -->
+                                                        <StackPanel Grid.Column="4">
+                                                            <TextBlock Text="Extracted Text"
+                                                                       FontSize="9"
+                                                                       Foreground="Gray"/>
+                                                            <TextBlock Text="{Binding Text}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       FontWeight="SemiBold"
+                                                                       ToolTip="{Binding Text}"/>
+                                                        </StackPanel>
+
+                                                        <!-- Confidence -->
+                                                        <StackPanel Grid.Column="5">
+                                                            <TextBlock Text="Confidence"
+                                                                       FontSize="9"
+                                                                       Foreground="Gray"/>
+                                                            <TextBlock FontWeight="Bold">
+                                                                <TextBlock.Text>
+                                                                    <Binding Path="Confidence"
+                                                                            StringFormat="{}{0:F1}%"/>
+                                                                </TextBlock.Text>
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Success}"
+                                                                                    Value="True">
+                                                                                <Setter Property="Foreground"
+                                                                                        Value="#27AE60"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Success}"
+                                                                                    Value="False">
+                                                                                <Setter Property="Foreground"
+                                                                                        Value="#E74C3C"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </StackPanel>
+
+                                                        <!-- Duration -->
+                                                        <StackPanel Grid.Column="6">
+                                                            <TextBlock Text="Duration"
+                                                                       FontSize="9"
+                                                                       Foreground="Gray"/>
+                                                            <TextBlock>
+                                                                <TextBlock.Text>
+                                                                    <Binding Path="DurationMs"
+                                                                            StringFormat="{}{0:F0}ms"/>
+                                                                </TextBlock.Text>
+                                                            </TextBlock>
+                                                        </StackPanel>
+
+                                                        <!-- Error Message -->
+                                                        <StackPanel Grid.Column="7">
+                                                            <TextBlock Text="Error"
+                                                                       FontSize="9"
+                                                                       Foreground="Gray">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility"
+                                                                                Value="Collapsed"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Success}"
+                                                                                    Value="False">
+                                                                                <Setter Property="Visibility"
+                                                                                        Value="Visible"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                            <TextBlock Text="{Binding ErrorMessage}"
+                                                                       Foreground="#E74C3C"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       ToolTip="{Binding ErrorMessage}">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility"
+                                                                                Value="Collapsed"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Success}"
+                                                                                    Value="False">
+                                                                                <Setter Property="Visibility"
+                                                                                        Value="Visible"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="No AI attempts recorded"
+                                               FontStyle="Italic"
+                                               Foreground="Gray"
+                                               Margin="5">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility"
+                                                        Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Attempts.Count}"
+                                                            Value="0">
+                                                        <Setter Property="Visibility"
+                                                                Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </DataGrid.RowDetailsTemplate>
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Status"
                                             Width="80"
@@ -282,6 +476,50 @@
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
+                        <DataGridTextColumn Header="Applied"
+                                            Width="80"
+                                            Binding="{Binding WasApplied}">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment"
+                                            Value="Center"/>
+                                    <Setter Property="FontWeight"
+                                            Value="Bold"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding WasApplied}"
+                                                     Value="True">
+                                            <Setter Property="Text"
+                                                    Value="✓ Yes"/>
+                                            <Setter Property="Foreground"
+                                                    Value="#27AE60"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding WasApplied}"
+                                                     Value="False">
+                                            <Setter Property="Text"
+                                                    Value="✗ No"/>
+                                            <Setter Property="Foreground"
+                                                    Value="#E67E22"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+
+                        <DataGridTextColumn Header="Reason"
+                                            Width="250"
+                                            Binding="{Binding ApplicationReason}">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="TextWrapping"
+                                            Value="Wrap"/>
+                                    <Setter Property="FontSize"
+                                            Value="11"/>
+                                    <Setter Property="Foreground"
+                                            Value="{StaticResource SecondaryForegroundBrush}"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+
                         <DataGridTextColumn Header="Tesseract (ms)"
                                             Width="90"
                                             Binding="{Binding TesseractDurationMs}">
@@ -309,8 +547,26 @@
                         </DataGridTextColumn>
 
                         <DataGridTextColumn Header="AI Provider"
-                                            Width="100"
-                                            Binding="{Binding AIProvider}"/>
+                                            Width="120">
+                            <DataGridTextColumn.Binding>
+                                <MultiBinding StringFormat="{}{0} ({1})">
+                                    <Binding Path="AIProvider"/>
+                                    <Binding Path="Attempts.Count"/>
+                                </MultiBinding>
+                            </DataGridTextColumn.Binding>
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="ToolTip">
+                                        <Setter.Value>
+                                            <MultiBinding StringFormat="{}Provider: {0}&#x0a;Total Attempts: {1}">
+                                                <Binding Path="AIProvider"/>
+                                                <Binding Path="Attempts.Count"/>
+                                            </MultiBinding>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
                         <DataGridTextColumn Header="Model"
                                             Width="120"
                                             Binding="{Binding Model}"/>

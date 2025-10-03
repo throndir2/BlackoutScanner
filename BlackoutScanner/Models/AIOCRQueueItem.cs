@@ -39,24 +39,17 @@ namespace BlackoutScanner.Models
         public string ImageHash { get; set; }
 
         /// <summary>
+        /// The hash of the DataRecord this field belongs to.
+        /// This is critical for identifying the correct record when AI results return asynchronously.
+        /// </summary>
+        public string RecordHash { get; set; }
+
+        /// <summary>
         /// When this item was added to the queue.
         /// </summary>
-        public DateTime QueuedAt { get; set; }
-
-        /// <summary>
-        /// The AI provider to use (e.g., "NvidiaBuild").
-        /// </summary>
-        public string AIProvider { get; set; }
-
-        /// <summary>
-        /// Optional: The model to use for this specific request.
-        /// If null, uses the configured default model.
-        /// </summary>
-        public string? ModelOverride { get; set; }
-
-        /// <summary>
-        /// Optional: Callback to invoke when processing completes.
-        /// </summary>
+        public DateTime QueuedAt { get; set; }        /// <summary>
+                                                      /// Optional: Callback to invoke when processing completes.
+                                                      /// </summary>
         public Action<AIOCRResult>? OnCompleted { get; set; }
 
         public AIOCRQueueItem()
@@ -67,8 +60,73 @@ namespace BlackoutScanner.Models
             CategoryName = string.Empty;
             FieldName = string.Empty;
             ImageHash = string.Empty;
+            RecordHash = string.Empty;
             QueuedAt = DateTime.UtcNow;
-            AIProvider = "NvidiaBuild";
+        }
+    }
+
+    /// <summary>
+    /// Represents a single attempt at AI OCR processing.
+    /// </summary>
+    public class AIAttempt
+    {
+        /// <summary>
+        /// The provider type used for this attempt (e.g., "NvidiaBuild", "Gemini").
+        /// </summary>
+        public string ProviderType { get; set; }
+
+        /// <summary>
+        /// The specific model used (e.g., "baidu/paddleocr", "gemini-1.5-flash").
+        /// </summary>
+        public string Model { get; set; }
+
+        /// <summary>
+        /// The extracted text from this attempt.
+        /// </summary>
+        public string Text { get; set; }
+
+        /// <summary>
+        /// Confidence score for this attempt (0-100).
+        /// </summary>
+        public float Confidence { get; set; }
+
+        /// <summary>
+        /// How long this attempt took in milliseconds.
+        /// </summary>
+        public long DurationMs { get; set; }
+
+        /// <summary>
+        /// Whether this attempt succeeded or failed.
+        /// </summary>
+        public bool Success { get; set; }
+
+        /// <summary>
+        /// Error message if the attempt failed.
+        /// </summary>
+        public string? ErrorMessage { get; set; }
+
+        /// <summary>
+        /// Priority of this provider at the time of the attempt.
+        /// </summary>
+        public int Priority { get; set; }
+
+        public AIAttempt()
+        {
+            ProviderType = string.Empty;
+            Model = string.Empty;
+            Text = string.Empty;
+        }
+
+        public override string ToString()
+        {
+            if (Success)
+            {
+                return $"{ProviderType}/{Model}: \"{Text}\" ({Confidence:F2}%) in {DurationMs}ms";
+            }
+            else
+            {
+                return $"{ProviderType}/{Model}: FAILED - {ErrorMessage}";
+            }
         }
     }
 
@@ -83,17 +141,29 @@ namespace BlackoutScanner.Models
         public Guid QueueItemId { get; set; }
 
         /// <summary>
-        /// Whether the AI processing was successful.
+        /// List of all AI provider attempts made for this item.
+        /// Ordered by the sequence they were tried.
+        /// </summary>
+        public List<AIAttempt> Attempts { get; set; }
+
+        /// <summary>
+        /// Index of the attempt that was selected as the final result.
+        /// -1 if no attempts succeeded or if using original Tesseract result.
+        /// </summary>
+        public int SelectedAttemptIndex { get; set; }
+
+        /// <summary>
+        /// Whether any AI processing was successful.
         /// </summary>
         public bool Success { get; set; }
 
         /// <summary>
-        /// The extracted text from the AI service.
+        /// The final extracted text (from the best AI attempt or original Tesseract).
         /// </summary>
         public string Text { get; set; }
 
         /// <summary>
-        /// Confidence score from the AI service (if available).
+        /// The final confidence score (from the selected attempt).
         /// </summary>
         public float Confidence { get; set; }
 
@@ -113,27 +183,32 @@ namespace BlackoutScanner.Models
         public string ImageHash { get; set; }
 
         /// <summary>
-        /// Error message if processing failed.
+        /// The hash of the DataRecord this field belongs to.
+        /// Used to identify the correct record when updating with AI results.
         /// </summary>
-        public string? ErrorMessage { get; set; }
+        public string RecordHash { get; set; }
 
         /// <summary>
-        /// When the processing was completed.
+        /// Error message if all processing failed.
         /// </summary>
+        public string? ErrorMessage { get; set; }        /// <summary>
+                                                         /// When the processing was completed.
+                                                         /// </summary>
         public DateTime ProcessedAt { get; set; }
 
         /// <summary>
-        /// How long the processing took.
+        /// Total processing time for all attempts.
         /// </summary>
         public TimeSpan ProcessingTime { get; set; }
 
         /// <summary>
-        /// The AI provider used.
+        /// The AI provider that produced the final result (if any).
+        /// Empty string if using original Tesseract result.
         /// </summary>
         public string AIProvider { get; set; }
 
         /// <summary>
-        /// The model used for processing.
+        /// The model that produced the final result (if any).
         /// </summary>
         public string Model { get; set; }
 
@@ -164,16 +239,30 @@ namespace BlackoutScanner.Models
         /// </summary>
         public long AIDurationMs { get; set; }
 
+        /// <summary>
+        /// Whether the AI result was applied (true) or rejected in favor of the original Tesseract result (false).
+        /// </summary>
+        public bool WasApplied { get; set; }
+
+        /// <summary>
+        /// Reason why the AI result was applied or rejected (e.g., "AI confidence higher", "Tesseract confidence higher").
+        /// </summary>
+        public string ApplicationReason { get; set; }
+
         public AIOCRResult()
         {
+            Attempts = new List<AIAttempt>();
+            SelectedAttemptIndex = -1;
             Text = string.Empty;
             CategoryName = string.Empty;
             FieldName = string.Empty;
             ImageHash = string.Empty;
+            RecordHash = string.Empty;
             ProcessedAt = DateTime.UtcNow;
             AIProvider = string.Empty;
             Model = string.Empty;
             OriginalOCRText = string.Empty;
+            ApplicationReason = string.Empty;
         }
     }
 }

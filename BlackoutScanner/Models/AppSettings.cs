@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -18,15 +19,28 @@ namespace BlackoutScanner.Models
         private float _ocrConfidenceThreshold = 90.0f;
         private List<string> _selectedLanguages = new List<string> { "eng", "kor", "jpn", "chi_sim", "chi_tra", "rus" };
         private bool _useAIEnhancedOCR = false;
+        private ObservableCollection<AIProviderConfiguration> _aiProviders = new ObservableCollection<AIProviderConfiguration>();
+
+        // Legacy fields - kept for migration purposes, marked obsolete
+        [Obsolete("Use AIProviders collection instead")]
         private string _aiProvider = "None";
+        [Obsolete("Use AIProviders collection instead")]
         private string _nvidiaApiKey = string.Empty;
-        private string _nvidiaModel = "microsoft/kosmos-2";
+        [Obsolete("Use AIProviders collection instead")]
+        private string _nvidiaModel = "baidu/paddleocr";
+        [Obsolete("Use AIProviders collection instead")]
         private string _openAIApiKey = string.Empty;
+        [Obsolete("Use AIProviders collection instead")]
         private string _openAIModel = "gpt-4-vision-preview";
+        [Obsolete("Use AIProviders collection instead")]
         private string _geminiApiKey = string.Empty;
+        [Obsolete("Use AIProviders collection instead")]
         private string _geminiModel = "gemini-pro-vision";
+        [Obsolete("Use AIProviders collection instead")]
         private string _customEndpointUrl = string.Empty;
+        [Obsolete("Use AIProviders collection instead")]
         private string _customEndpointApiKey = string.Empty;
+        [Obsolete("Use AIProviders collection instead")]
         private string _customEndpointModel = string.Empty;
 
         // UI State Settings
@@ -167,7 +181,7 @@ namespace BlackoutScanner.Models
                     }
                     else
                     {
-                        _selectedLanguages = value;
+                        _selectedLanguages = value ?? new List<string>();
                     }
 
                     Serilog.Log.Information($"[AppSettings.SelectedLanguages] AFTER set - Count: {_selectedLanguages?.Count ?? 0}, Languages: [{string.Join(", ", _selectedLanguages ?? new List<string>())}]");
@@ -189,6 +203,27 @@ namespace BlackoutScanner.Models
             }
         }
 
+        /// <summary>
+        /// Collection of configured AI providers for cascading OCR fallback.
+        /// Providers are tried in priority order until confidence threshold is met.
+        /// </summary>
+        public ObservableCollection<AIProviderConfiguration> AIProviders
+        {
+            get => _aiProviders;
+            set
+            {
+                if (_aiProviders != value)
+                {
+                    _aiProviders = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // ===== Legacy Properties (kept for migration support) =====
+        // These will be removed in a future version after migration is complete
+
+        [Obsolete("Use AIProviders collection instead")]
         public string AIProvider
         {
             get => _aiProvider;
@@ -202,7 +237,7 @@ namespace BlackoutScanner.Models
             }
         }
 
-        // NVIDIA Build Settings
+        [Obsolete("Use AIProviders collection instead")]
         public string NvidiaApiKey
         {
             get => _nvidiaApiKey;
@@ -216,6 +251,7 @@ namespace BlackoutScanner.Models
             }
         }
 
+        [Obsolete("Use AIProviders collection instead")]
         public string NvidiaModel
         {
             get => _nvidiaModel;
@@ -229,7 +265,7 @@ namespace BlackoutScanner.Models
             }
         }
 
-        // OpenAI Settings (for future use)
+        [Obsolete("Use AIProviders collection instead")]
         public string OpenAIApiKey
         {
             get => _openAIApiKey;
@@ -243,6 +279,7 @@ namespace BlackoutScanner.Models
             }
         }
 
+        [Obsolete("Use AIProviders collection instead")]
         public string OpenAIModel
         {
             get => _openAIModel;
@@ -256,7 +293,7 @@ namespace BlackoutScanner.Models
             }
         }
 
-        // Google Gemini Settings (for future use)
+        [Obsolete("Use AIProviders collection instead")]
         public string GeminiApiKey
         {
             get => _geminiApiKey;
@@ -270,6 +307,7 @@ namespace BlackoutScanner.Models
             }
         }
 
+        [Obsolete("Use AIProviders collection instead")]
         public string GeminiModel
         {
             get => _geminiModel;
@@ -283,7 +321,7 @@ namespace BlackoutScanner.Models
             }
         }
 
-        // Custom Endpoint Settings (for future use)
+        [Obsolete("Use AIProviders collection instead")]
         public string CustomEndpointUrl
         {
             get => _customEndpointUrl;
@@ -297,6 +335,7 @@ namespace BlackoutScanner.Models
             }
         }
 
+        [Obsolete("Use AIProviders collection instead")]
         public string CustomEndpointApiKey
         {
             get => _customEndpointApiKey;
@@ -310,6 +349,7 @@ namespace BlackoutScanner.Models
             }
         }
 
+        [Obsolete("Use AIProviders collection instead")]
         public string CustomEndpointModel
         {
             get => _customEndpointModel;

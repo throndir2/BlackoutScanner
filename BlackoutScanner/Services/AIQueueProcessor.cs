@@ -24,6 +24,9 @@ namespace BlackoutScanner.Services
         private bool _isRunning;
         private readonly object _lockObject = new object();
 
+        // Rate limiting tracking: providerId -> (requestTimes in current minute window)
+        private readonly ConcurrentDictionary<Guid, ConcurrentQueue<DateTime>> _providerRequestTimes;
+
         // Statistics
         private int _totalProcessed;
         private int _totalSucceeded;
@@ -43,6 +46,7 @@ namespace BlackoutScanner.Services
             _settingsManager = settingsManager;
             _cancellationTokenSource = new CancellationTokenSource();
             _processingTimes = new List<TimeSpan>();
+            _providerRequestTimes = new ConcurrentDictionary<Guid, ConcurrentQueue<DateTime>>();
 
             Log.Information("AI Queue Processor initialized");
         }
@@ -55,7 +59,7 @@ namespace BlackoutScanner.Services
             }
 
             _queue.Enqueue(item);
-            Log.Information($"[AIQueueProcessor] Item ENQUEUED: Category='{item.CategoryName}', Field='{item.FieldName}', OriginalText='{item.OriginalResult?.Text}', Provider='{item.AIProvider}', QueueSize={_queue.Count}");
+            Log.Information($"[AIQueueProcessor] Item ENQUEUED: Category='{item.CategoryName}', Field='{item.FieldName}', OriginalText='{item.OriginalResult?.Text}', QueueSize={_queue.Count}");
         }
 
         public void Start()
@@ -179,14 +183,14 @@ namespace BlackoutScanner.Services
 
         private async Task ProcessItemAsync(AIOCRQueueItem item, CancellationToken cancellationToken)
         {
-            var stopwatch = Stopwatch.StartNew();
+            var overallStopwatch = Stopwatch.StartNew();
             var result = new AIOCRResult
             {
                 QueueItemId = item.Id,
                 CategoryName = item.CategoryName,
                 FieldName = item.FieldName,
                 ImageHash = item.ImageHash,
-                AIProvider = item.AIProvider,
+                RecordHash = item.RecordHash, // CRITICAL: Propagate record hash
                 EnqueuedTime = item.QueuedAt
             };
 
@@ -211,7 +215,7 @@ namespace BlackoutScanner.Services
 
             try
             {
-                Log.Information($"[AIQueueProcessor] PROCESSING ITEM: Category='{item.CategoryName}', Field='{item.FieldName}', Provider='{item.AIProvider}', OriginalText='{result.OriginalOCRText}', OriginalConfidence={result.OriginalConfidence:F2}");
+                Log.Information($"[AIQueueProcessor] PROCESSING ITEM: Category='{item.CategoryName}', Field='{item.FieldName}', OriginalText='{result.OriginalOCRText}', OriginalConfidence={result.OriginalConfidence:F2}");
 
                 // Check if AI enhancement is still enabled
                 if (!_settingsManager.Settings.UseAIEnhancedOCR)
@@ -222,61 +226,191 @@ namespace BlackoutScanner.Services
                     return;
                 }
 
-                // Get the appropriate AI service
-                var aiService = GetAIService(item.AIProvider);
-                if (aiService == null)
+                // Get enabled AI providers sorted by priority (lower priority = tried first)
+                var enabledProviders = _settingsManager.Settings.AIProviders
+                    .Where(p => p.IsEnabled)
+                    .OrderBy(p => p.Priority)
+                    .ToList();
+
+                if (!enabledProviders.Any())
                 {
-                    Log.Error($"AI provider '{item.AIProvider}' not found or not configured");
+                    Log.Warning($"[AIQueueProcessor] No enabled AI providers configured, SKIPPING item: {item.CategoryName}/{item.FieldName}");
                     result.Success = false;
-                    result.ErrorMessage = $"AI provider '{item.AIProvider}' not available";
+                    result.ErrorMessage = "No AI providers are enabled";
                     return;
                 }
 
-                // Update configuration if needed
-                UpdateServiceConfiguration(aiService, item);
+                Log.Information($"[AIQueueProcessor] Found {enabledProviders.Count} enabled AI provider(s) to try");
 
-                // Check if configured
-                if (!aiService.IsConfigured())
+                var confidenceThreshold = _settingsManager.Settings.OCRConfidenceThreshold;
+                bool thresholdMet = false;
+
+                // Try each provider in priority order
+                foreach (var providerConfig in enabledProviders)
                 {
-                    Log.Warning($"AI service '{item.AIProvider}' is not configured");
-                    result.Success = false;
-                    result.ErrorMessage = "AI service is not configured (missing API key or model)";
-                    return;
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+
+                    // Check rate limit before attempting
+                    if (!CanMakeRequest(providerConfig))
+                    {
+                        Log.Warning($"[AIQueueProcessor] Provider '{providerConfig.DisplayName}' has reached rate limit ({providerConfig.RequestsPerMinute} RPM), skipping to next provider");
+
+                        var rateLimitAttempt = new AIAttempt
+                        {
+                            ProviderType = providerConfig.ProviderType,
+                            Model = providerConfig.Model,
+                            Priority = providerConfig.Priority,
+                            Success = false,
+                            ErrorMessage = $"Rate limit reached ({providerConfig.RequestsPerMinute} requests/minute)",
+                            DurationMs = 0
+                        };
+                        result.Attempts.Add(rateLimitAttempt);
+                        continue;
+                    }
+
+                    var attemptStopwatch = Stopwatch.StartNew();
+                    var attempt = new AIAttempt
+                    {
+                        ProviderType = providerConfig.ProviderType,
+                        Model = providerConfig.Model,
+                        Priority = providerConfig.Priority
+                    };
+
+                    try
+                    {
+                        Log.Information($"[AIQueueProcessor] Trying provider: {providerConfig.DisplayName} (Priority {providerConfig.Priority})");
+
+                        // Get the AI service for this provider
+                        var aiService = GetAIService(providerConfig);
+                        if (aiService == null)
+                        {
+                            attempt.Success = false;
+                            attempt.ErrorMessage = $"Provider '{providerConfig.ProviderType}' not available";
+                            attempt.DurationMs = attemptStopwatch.ElapsedMilliseconds;
+                            result.Attempts.Add(attempt);
+                            Log.Warning($"[AIQueueProcessor] {attempt.ErrorMessage}, skipping to next provider");
+                            continue;
+                        }
+
+                        // Configure the service
+                        ConfigureAIService(aiService, providerConfig);
+
+                        // Check if configured
+                        if (!aiService.IsConfigured())
+                        {
+                            attempt.Success = false;
+                            attempt.ErrorMessage = "Service not configured (missing API key or model)";
+                            attempt.DurationMs = attemptStopwatch.ElapsedMilliseconds;
+                            result.Attempts.Add(attempt);
+                            Log.Warning($"[AIQueueProcessor] Provider '{providerConfig.DisplayName}' is not configured, skipping");
+                            continue;
+                        }
+
+                        // Record this request for rate limiting
+                        RecordRequest(providerConfig);
+
+                        // Perform AI OCR
+                        var (aiText, aiConfidence) = await aiService.PerformOCRAsync(item.ImageData);
+
+                        attemptStopwatch.Stop();
+                        attempt.Success = true;
+                        attempt.Text = aiText;
+                        attempt.Confidence = aiConfidence;
+                        attempt.DurationMs = attemptStopwatch.ElapsedMilliseconds;
+                        result.Attempts.Add(attempt);
+
+                        Log.Information($"[AIQueueProcessor] Provider '{providerConfig.DisplayName}' returned: Text='{aiText}', Confidence={aiConfidence:F2}%, Time={attempt.DurationMs}ms");
+
+                        // Check if this result meets the confidence threshold
+                        if (aiConfidence >= confidenceThreshold)
+                        {
+                            Log.Information($"[AIQueueProcessor] ✓ Confidence threshold MET ({aiConfidence:F2}% >= {confidenceThreshold:F2}%), stopping cascade");
+                            thresholdMet = true;
+                            break;
+                        }
+                        else
+                        {
+                            Log.Information($"[AIQueueProcessor] ✗ Confidence threshold NOT MET ({aiConfidence:F2}% < {confidenceThreshold:F2}%), trying next provider");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        attemptStopwatch.Stop();
+                        attempt.Success = false;
+                        attempt.ErrorMessage = ex.Message;
+                        attempt.DurationMs = attemptStopwatch.ElapsedMilliseconds;
+                        result.Attempts.Add(attempt);
+                        Log.Error(ex, $"[AIQueueProcessor] Provider '{providerConfig.DisplayName}' failed, trying next provider");
+                    }
                 }
 
-                // Perform AI OCR
-                var (aiText, aiConfidence) = await aiService.PerformOCRAsync(item.ImageData);
+                // Select the best result from all attempts
+                if (result.Attempts.Any(a => a.Success))
+                {
+                    // Find the attempt with the highest confidence
+                    var bestAttempt = result.Attempts
+                        .Where(a => a.Success)
+                        .OrderByDescending(a => a.Confidence)
+                        .First();
 
-                result.Success = true;
-                result.Text = aiText;
-                result.Confidence = aiConfidence;
-                result.Model = aiService is INvidiaAIService nvidiaService ? nvidiaService.Model : "unknown";
+                    result.SelectedAttemptIndex = result.Attempts.IndexOf(bestAttempt);
+                    result.Success = true;
+                    result.Text = bestAttempt.Text;
+                    result.Confidence = bestAttempt.Confidence;
+                    result.AIProvider = bestAttempt.ProviderType;
+                    result.Model = bestAttempt.Model;
+                    result.AIDurationMs = result.Attempts.Sum(a => a.DurationMs);
 
-                stopwatch.Stop();
-                result.ProcessingTime = stopwatch.Elapsed;
-                result.AIDurationMs = stopwatch.ElapsedMilliseconds;
+                    // Determine application reason
+                    if (thresholdMet)
+                    {
+                        result.ApplicationReason = $"Threshold met at priority {bestAttempt.Priority} ({bestAttempt.Confidence:F2}% >= {confidenceThreshold:F2}%)";
+                    }
+                    else if (result.Confidence > result.OriginalConfidence)
+                    {
+                        result.ApplicationReason = $"Best AI confidence ({result.Confidence:F2}%) higher than Tesseract ({result.OriginalConfidence:F2}%)";
+                    }
+                    else
+                    {
+                        result.ApplicationReason = $"Best available result (below threshold: {result.Confidence:F2}% < {confidenceThreshold:F2}%)";
+                    }
+
+                    _totalSucceeded++;
+                    Log.Information($"[AIQueueProcessor] ✓ SELECTED: {bestAttempt.ProviderType}/{bestAttempt.Model} with {bestAttempt.Confidence:F2}% confidence. Reason: {result.ApplicationReason}");
+                    Log.Information($"[AIQueueProcessor] Total attempts: {result.Attempts.Count}, Successful: {result.Attempts.Count(a => a.Success)}, Total time: {result.AIDurationMs}ms");
+                }
+                else
+                {
+                    // All attempts failed
+                    result.Success = false;
+                    result.ErrorMessage = $"All {result.Attempts.Count} provider(s) failed";
+                    result.ApplicationReason = "All AI providers failed";
+                    result.AIDurationMs = result.Attempts.Sum(a => a.DurationMs);
+                    _totalFailed++;
+                    Log.Error($"[AIQueueProcessor] ✗ ALL PROVIDERS FAILED for {item.CategoryName}/{item.FieldName}");
+                }
+
+                overallStopwatch.Stop();
+                result.ProcessingTime = overallStopwatch.Elapsed;
                 result.ProcessedAt = DateTime.UtcNow;
-
-                _totalSucceeded++;
-                Log.Information($"AI OCR succeeded: Text='{aiText}', Confidence={aiConfidence:F2}%, Time={stopwatch.ElapsedMilliseconds}ms");
             }
             catch (Exception ex)
             {
-                stopwatch.Stop();
+                overallStopwatch.Stop();
                 result.Success = false;
                 result.ErrorMessage = ex.Message;
-                result.ProcessingTime = stopwatch.Elapsed;
-                result.AIDurationMs = stopwatch.ElapsedMilliseconds;
+                result.ProcessingTime = overallStopwatch.Elapsed;
                 result.ProcessedAt = DateTime.UtcNow;
 
                 _totalFailed++;
-                Log.Error(ex, $"AI OCR failed: Category={item.CategoryName}, Field={item.FieldName}");
+                Log.Error(ex, $"AI OCR processing failed unexpectedly: Category={item.CategoryName}, Field={item.FieldName}");
             }
             finally
             {
                 _totalProcessed++;
                 _lastProcessedAt = DateTime.UtcNow;
-                _processingTimes.Add(stopwatch.Elapsed);
+                _processingTimes.Add(overallStopwatch.Elapsed);
 
                 // Keep only last 100 processing times for average calculation
                 if (_processingTimes.Count > 100)
@@ -292,35 +426,97 @@ namespace BlackoutScanner.Services
             }
         }
 
-        private IAIProvider? GetAIService(string providerName)
+        private IAIProvider? GetAIService(AIProviderConfiguration providerConfig)
         {
             try
             {
-                return providerName switch
+                return providerConfig.ProviderType switch
                 {
-                    "NvidiaBuild" => ServiceLocator.GetService<INvidiaAIService>(),
+                    "NvidiaBuild" => ServiceLocator.GetService<INvidiaOCRService>(),
+                    "Gemini" => new GeminiOCRService(), // Create new instance for Gemini
                     // Future providers:
                     // "OpenAI" => ServiceLocator.GetService<IOpenAIService>(),
-                    // "Gemini" => ServiceLocator.GetService<IGeminiService>(),
                     _ => null
                 };
             }
             catch (Exception ex)
             {
-                Log.Error(ex, $"Failed to get AI service for provider '{providerName}'");
+                Log.Error(ex, $"Failed to get AI service for provider '{providerConfig.ProviderType}'");
                 return null;
             }
         }
 
-        private void UpdateServiceConfiguration(IAIProvider service, AIOCRQueueItem item)
+        private void ConfigureAIService(IAIProvider service, AIProviderConfiguration providerConfig)
         {
-            if (service is INvidiaAIService nvidiaService)
+            if (service is INvidiaOCRService nvidiaService)
             {
-                var apiKey = _settingsManager.Settings.NvidiaApiKey;
-                var model = item.ModelOverride ?? _settingsManager.Settings.NvidiaModel;
-                nvidiaService.UpdateConfiguration(apiKey, model);
+                nvidiaService.UpdateConfiguration(providerConfig.ApiKey, providerConfig.Model);
+                Log.Debug($"Configured NVIDIA service with model: {providerConfig.Model}");
+            }
+            else if (service is GeminiOCRService geminiService)
+            {
+                geminiService.UpdateConfiguration(providerConfig.ApiKey, providerConfig.Model);
+                Log.Debug($"Configured Gemini service with model: {providerConfig.Model}");
             }
             // Future: Handle other providers
+            // else if (service is IOpenAIService openAIService)
+            // {
+            //     openAIService.UpdateConfiguration(providerConfig.ApiKey, providerConfig.Model);
+            // }
+        }
+
+        /// <summary>
+        /// Checks if a request can be made to the specified provider based on rate limits.
+        /// </summary>
+        private bool CanMakeRequest(AIProviderConfiguration providerConfig)
+        {
+            if (providerConfig.RequestsPerMinute <= 0)
+            {
+                // No rate limit configured, allow request
+                return true;
+            }
+
+            // Get or create request queue for this provider
+            var requestQueue = _providerRequestTimes.GetOrAdd(providerConfig.Id, _ => new ConcurrentQueue<DateTime>());
+
+            // Clean up old requests (older than 1 minute)
+            var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
+            while (requestQueue.TryPeek(out var oldestRequest) && oldestRequest < oneMinuteAgo)
+            {
+                requestQueue.TryDequeue(out _);
+            }
+
+            // Check if we can make a new request
+            var currentRequestCount = requestQueue.Count;
+            var canMakeRequest = currentRequestCount < providerConfig.RequestsPerMinute;
+
+            if (canMakeRequest)
+            {
+                Log.Debug($"[RateLimit] Provider '{providerConfig.DisplayName}': {currentRequestCount}/{providerConfig.RequestsPerMinute} requests in current minute - OK");
+            }
+            else
+            {
+                Log.Warning($"[RateLimit] Provider '{providerConfig.DisplayName}': {currentRequestCount}/{providerConfig.RequestsPerMinute} requests in current minute - RATE LIMIT REACHED");
+            }
+
+            return canMakeRequest;
+        }
+
+        /// <summary>
+        /// Records a request made to the specified provider for rate limiting tracking.
+        /// </summary>
+        private void RecordRequest(AIProviderConfiguration providerConfig)
+        {
+            if (providerConfig.RequestsPerMinute <= 0)
+            {
+                // No rate limiting, don't track
+                return;
+            }
+
+            var requestQueue = _providerRequestTimes.GetOrAdd(providerConfig.Id, _ => new ConcurrentQueue<DateTime>());
+            requestQueue.Enqueue(DateTime.UtcNow);
+
+            Log.Debug($"[RateLimit] Recorded request for provider '{providerConfig.DisplayName}', total in window: {requestQueue.Count}");
         }
 
         public void Dispose()

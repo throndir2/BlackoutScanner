@@ -45,7 +45,7 @@ namespace BlackoutScanner.Utilities
             services.AddSingleton<IHotKeyManager, HotKeyManager>();
 
             // Register AI Services
-            services.AddSingleton<INvidiaAIService, NvidiaAIService>();
+            services.AddSingleton<INvidiaOCRService, NvidiaOCRService>();
             services.AddSingleton<IAIQueueProcessor, AIQueueProcessor>();
 
             // Register slow-initializing OCR-related services last with error handling

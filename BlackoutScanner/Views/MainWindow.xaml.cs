@@ -3128,7 +3128,7 @@ namespace BlackoutScanner.Views
         {
             if (sender is ComboBox comboBox && comboBox.SelectedItem is ComboBoxItem selectedItem && SettingsManager != null)
             {
-                var model = selectedItem.Tag?.ToString() ?? "microsoft/kosmos-2";
+                var model = selectedItem.Tag?.ToString() ?? "baidu/paddleocr";
                 SettingsManager.Settings.NvidiaModel = model;
                 SettingsManager.SaveSettings();
 
@@ -3157,7 +3157,7 @@ namespace BlackoutScanner.Views
                     }
 
                     // Get the NVIDIA AI service and test the connection
-                    var nvidiaService = ServiceLocator.GetService<INvidiaAIService>();
+                    var nvidiaService = ServiceLocator.GetService<INvidiaOCRService>();
 
                     // Update service configuration with current settings
                     nvidiaService.UpdateConfiguration(
@@ -3238,6 +3238,120 @@ namespace BlackoutScanner.Views
                     }
                 }
             });
+        }
+
+        // AI Provider Management Methods
+        private void AddAIProvider_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new AIProviderEditorDialog();
+            if (dialog.ShowDialog() == true && dialog.Result != null)
+            {
+                SettingsManager?.Settings.AIProviders.Add(dialog.Result);
+                SettingsManager?.SaveSettings();
+                Log.Information($"Added new AI provider: {dialog.Result.DisplayName}");
+            }
+        }
+
+        private void EditAIProvider_Click(object sender, RoutedEventArgs e)
+        {
+            if (FindName("aiProvidersDataGrid") is DataGrid dataGrid &&
+                dataGrid.SelectedItem is AIProviderConfiguration selectedProvider)
+            {
+                var dialog = new AIProviderEditorDialog(selectedProvider);
+                if (dialog.ShowDialog() == true && dialog.Result != null)
+                {
+                    // Find and replace the provider
+                    var index = SettingsManager?.Settings.AIProviders.IndexOf(selectedProvider) ?? -1;
+                    if (index >= 0 && SettingsManager != null)
+                    {
+                        SettingsManager.Settings.AIProviders[index] = dialog.Result;
+                        SettingsManager.SaveSettings();
+                        Log.Information($"Updated AI provider: {dialog.Result.DisplayName}");
+                    }
+                }
+            }
+        }
+
+        private void DeleteAIProvider_Click(object sender, RoutedEventArgs e)
+        {
+            if (FindName("aiProvidersDataGrid") is DataGrid dataGrid &&
+                dataGrid.SelectedItem is AIProviderConfiguration selectedProvider)
+            {
+                var result = MessageBox.Show(
+                    $"Are you sure you want to delete '{selectedProvider.DisplayName}'?",
+                    "Confirm Delete",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    SettingsManager?.Settings.AIProviders.Remove(selectedProvider);
+                    SettingsManager?.SaveSettings();
+                    Log.Information($"Deleted AI provider: {selectedProvider.DisplayName}");
+                }
+            }
+        }
+
+        private void MoveProviderUp_Click(object sender, RoutedEventArgs e)
+        {
+            if (FindName("aiProvidersDataGrid") is DataGrid dataGrid &&
+                dataGrid.SelectedItem is AIProviderConfiguration selectedProvider &&
+                SettingsManager != null)
+            {
+                var providers = SettingsManager.Settings.AIProviders;
+                var index = providers.IndexOf(selectedProvider);
+
+                if (index > 0)
+                {
+                    // Swap priorities
+                    var temp = providers[index - 1].Priority;
+                    providers[index - 1].Priority = selectedProvider.Priority;
+                    selectedProvider.Priority = temp;
+
+                    // Re-sort the collection
+                    var sorted = providers.OrderBy(p => p.Priority).ToList();
+                    providers.Clear();
+                    foreach (var provider in sorted)
+                    {
+                        providers.Add(provider);
+                    }
+
+                    SettingsManager.SaveSettings();
+                    dataGrid.SelectedItem = selectedProvider;
+                    Log.Information($"Moved provider '{selectedProvider.DisplayName}' up");
+                }
+            }
+        }
+
+        private void MoveProviderDown_Click(object sender, RoutedEventArgs e)
+        {
+            if (FindName("aiProvidersDataGrid") is DataGrid dataGrid &&
+                dataGrid.SelectedItem is AIProviderConfiguration selectedProvider &&
+                SettingsManager != null)
+            {
+                var providers = SettingsManager.Settings.AIProviders;
+                var index = providers.IndexOf(selectedProvider);
+
+                if (index < providers.Count - 1 && index >= 0)
+                {
+                    // Swap priorities
+                    var temp = providers[index + 1].Priority;
+                    providers[index + 1].Priority = selectedProvider.Priority;
+                    selectedProvider.Priority = temp;
+
+                    // Re-sort the collection
+                    var sorted = providers.OrderBy(p => p.Priority).ToList();
+                    providers.Clear();
+                    foreach (var provider in sorted)
+                    {
+                        providers.Add(provider);
+                    }
+
+                    SettingsManager.SaveSettings();
+                    dataGrid.SelectedItem = selectedProvider;
+                    Log.Information($"Moved provider '{selectedProvider.DisplayName}' down");
+                }
+            }
         }
 
         private void InitializeAISettings()
@@ -3323,12 +3437,29 @@ namespace BlackoutScanner.Views
 
                 // Optionally update the main UI with the enhanced OCR result
                 // (This would update the actual field in the scan tab with the AI result)
+                // Only apply if successful and has text
                 if (result.Success && !string.IsNullOrWhiteSpace(result.Text))
                 {
                     Dispatcher.Invoke(() =>
                     {
                         UpdateFieldWithAIResult(result);
                     });
+                }
+                else if (result.Success)
+                {
+                    // AI succeeded but produced empty text, keep original
+                    result.WasApplied = false;
+                    result.ApplicationReason = "AI result was empty";
+                    Log.Information($"[OnAIQueueItemProcessed] AI result not applied: {result.ApplicationReason}");
+                }
+                else
+                {
+                    // AI processing failed
+                    result.WasApplied = false;
+                    result.ApplicationReason = !string.IsNullOrEmpty(result.ErrorMessage)
+                        ? $"AI processing failed: {result.ErrorMessage}"
+                        : "AI processing failed";
+                    Log.Information($"[OnAIQueueItemProcessed] AI result not applied: {result.ApplicationReason}");
                 }
             }
             catch (Exception ex)
@@ -3340,12 +3471,29 @@ namespace BlackoutScanner.Views
         /// <summary>
         /// Updates a field in the scan UI with the AI-enhanced OCR result.
         /// Also updates the underlying DataRecord in DataManager and the Data tab's ObservableCollection.
+        /// Only applies the AI result if its confidence is higher than the original Tesseract confidence.
         /// </summary>
         private void UpdateFieldWithAIResult(AIOCRResult result)
         {
             try
             {
-                Log.Information($"[UpdateFieldWithAIResult] Processing AI result: Category='{result.CategoryName}', Field='{result.FieldName}', Text='{result.Text}', Confidence={result.Confidence:F2}%, ImageHash='{result.ImageHash}'");
+                Log.Information($"[UpdateFieldWithAIResult] Processing AI result: Category='{result.CategoryName}', Field='{result.FieldName}', Text='{result.Text}', Confidence={result.Confidence:F2}%, OriginalConfidence={result.OriginalConfidence:F2}%, ImageHash='{result.ImageHash}', RecordHash='{result.RecordHash}'");
+
+                // Compare AI confidence vs Tesseract confidence
+                bool shouldApplyAIResult = result.Confidence > result.OriginalConfidence;
+
+                if (!shouldApplyAIResult)
+                {
+                    result.WasApplied = false;
+                    result.ApplicationReason = $"Tesseract confidence ({result.OriginalConfidence:F2}%) was higher than AI confidence ({result.Confidence:F2}%)";
+                    Log.Information($"[UpdateFieldWithAIResult] AI result NOT applied: {result.ApplicationReason}");
+                    return; // Don't apply the AI result, keep the original
+                }
+
+                // AI confidence is higher, apply the result
+                result.WasApplied = true;
+                result.ApplicationReason = $"AI confidence ({result.Confidence:F2}%) was higher than Tesseract ({result.OriginalConfidence:F2}%)";
+                Log.Information($"[UpdateFieldWithAIResult] AI result WILL BE APPLIED: {result.ApplicationReason}");
 
                 // Cache the AI OCR result if we have the image hash
                 if (!string.IsNullOrEmpty(result.ImageHash) && ocrProcessor != null)
@@ -3361,35 +3509,46 @@ namespace BlackoutScanner.Views
                         Log.Warning($"[UpdateFieldWithAIResult] OCRProcessor is null, cannot cache AI result");
                 }
 
-                // Update the Scan tab textbox
-                // Note: fieldTextBoxes uses just the field name as key, not category_field
-                if (fieldTextBoxes.TryGetValue(result.FieldName, out var textBox))
+                // Update the Scan tab textbox ONLY if it's the currently displayed record
+                // Check if the result's record hash matches the current record
+                bool isCurrentRecord = !string.IsNullOrEmpty(result.RecordHash) && result.RecordHash == currentRecordHash;
+
+                if (isCurrentRecord)
                 {
-                    // Update the textbox with the AI result
-                    textBox.Text = result.Text;
+                    // Note: fieldTextBoxes uses just the field name as key, not category_field
+                    if (fieldTextBoxes.TryGetValue(result.FieldName, out var textBox))
+                    {
+                        // Update the textbox with the AI result
+                        textBox.Text = result.Text;
 
-                    // Optionally add a visual indicator that this was AI-enhanced
-                    textBox.Background = new SolidColorBrush(Color.FromArgb(30, 46, 204, 113)); // Light green tint
+                        // Optionally add a visual indicator that this was AI-enhanced
+                        textBox.Background = new SolidColorBrush(Color.FromArgb(30, 46, 204, 113)); // Light green tint
 
-                    // Store the value to prevent Scanner from overwriting it
-                    lastFieldValues[result.FieldName] = result.Text;
+                        // Store the value to prevent Scanner from overwriting it
+                        lastFieldValues[result.FieldName] = result.Text;
 
-                    Log.Information($"[UpdateFieldWithAIResult] Updated Scan tab field '{result.FieldName}' with AI result: '{result.Text}'");
+                        Log.Information($"[UpdateFieldWithAIResult] Updated Scan tab field '{result.FieldName}' with AI result: '{result.Text}'");
+                    }
+                    else
+                    {
+                        Log.Warning($"[UpdateFieldWithAIResult] Could not find textbox for field '{result.FieldName}'");
+                    }
                 }
                 else
                 {
-                    Log.Warning($"[UpdateFieldWithAIResult] Could not find textbox for field '{result.FieldName}'");
+                    Log.Debug($"[UpdateFieldWithAIResult] Skipping Scan tab update - AI result is for a different record (RecordHash: '{result.RecordHash}' vs Current: '{currentRecordHash}')");
                 }
 
-                // Update the underlying DataRecord in DataManager
-                if (GameProfileManager?.ActiveProfile != null && dataManager != null && currentRecordHash != null)
+                // Update the underlying DataRecord in DataManager using the RecordHash from the AI result
+                // This ensures we update the CORRECT record, even if the scanner has moved on
+                if (GameProfileManager?.ActiveProfile != null && dataManager != null && !string.IsNullOrEmpty(result.RecordHash))
                 {
-                    if (dataManager.DataRecordDictionary.TryGetValue(currentRecordHash, out var existingRecord))
+                    if (dataManager.DataRecordDictionary.TryGetValue(result.RecordHash, out var existingRecord))
                     {
                         // Verify this record matches the category
                         if (existingRecord.Category == result.CategoryName)
                         {
-                            Log.Debug($"[UpdateFieldWithAIResult] Found existing record with hash '{currentRecordHash}', updating field '{result.FieldName}'");
+                            Log.Debug($"[UpdateFieldWithAIResult] Found existing record with hash '{result.RecordHash}', updating field '{result.FieldName}'");
 
                             // Update the field value
                             existingRecord.Fields[result.FieldName] = result.Text;
@@ -3419,7 +3578,7 @@ namespace BlackoutScanner.Views
                             if (categoryCollections.TryGetValue(result.CategoryName, out var collection))
                             {
                                 var recordInCollection = collection.FirstOrDefault(r =>
-                                    dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == currentRecordHash);
+                                    dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == result.RecordHash);
 
                                 if (recordInCollection != null)
                                 {
@@ -3454,7 +3613,7 @@ namespace BlackoutScanner.Views
                     }
                     else
                     {
-                        Log.Warning($"[UpdateFieldWithAIResult] Could not find record with hash '{currentRecordHash}' in DataRecordDictionary");
+                        Log.Warning($"[UpdateFieldWithAIResult] Could not find record with hash '{result.RecordHash}' in DataRecordDictionary");
                     }
                 }
                 else
@@ -3463,8 +3622,8 @@ namespace BlackoutScanner.Views
                         Log.Warning($"[UpdateFieldWithAIResult] No active profile");
                     if (dataManager == null)
                         Log.Warning($"[UpdateFieldWithAIResult] DataManager is null");
-                    if (currentRecordHash == null)
-                        Log.Warning($"[UpdateFieldWithAIResult] currentRecordHash is null - cannot update DataRecord");
+                    if (string.IsNullOrEmpty(result.RecordHash))
+                        Log.Warning($"[UpdateFieldWithAIResult] RecordHash is empty - cannot update DataRecord (this may be from an older queue item before the fix)");
                 }
             }
             catch (Exception ex)
