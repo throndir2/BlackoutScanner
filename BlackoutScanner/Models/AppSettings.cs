@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace BlackoutScanner.Models
@@ -14,8 +15,26 @@ namespace BlackoutScanner.Models
         private string _hotKey = "Ctrl+Q";
         private bool _useLocalTimeInExports = false;
         private bool _useMultiEngineOCR = false;
-        private float _ocrConfidenceThreshold = 80.0f;
+        private float _ocrConfidenceThreshold = 90.0f;
         private List<string> _selectedLanguages = new List<string> { "eng", "kor", "jpn", "chi_sim", "chi_tra", "rus" };
+        private bool _useAIEnhancedOCR = false;
+        private string _aiProvider = "None";
+        private string _nvidiaApiKey = string.Empty;
+        private string _nvidiaModel = "microsoft/kosmos-2";
+        private string _openAIApiKey = string.Empty;
+        private string _openAIModel = "gpt-4-vision-preview";
+        private string _geminiApiKey = string.Empty;
+        private string _geminiModel = "gemini-pro-vision";
+        private string _customEndpointUrl = string.Empty;
+        private string _customEndpointApiKey = string.Empty;
+        private string _customEndpointModel = string.Empty;
+
+        // UI State Settings
+        private bool _debugSettingsExpanded = false;
+        private bool _ocrSettingsExpanded = true;
+        private bool _aiSettingsExpanded = false;
+        private bool _hotkeySettingsExpanded = false;
+        private bool _exportSettingsExpanded = false;
 
         public string ExportFolder
         {
@@ -128,7 +147,243 @@ namespace BlackoutScanner.Models
             {
                 if (_selectedLanguages != value)
                 {
-                    _selectedLanguages = value;
+                    Serilog.Log.Information($"[AppSettings.SelectedLanguages] BEFORE set - Count: {_selectedLanguages?.Count ?? 0}, Languages: [{string.Join(", ", _selectedLanguages ?? new List<string>())}]");
+                    Serilog.Log.Information($"[AppSettings.SelectedLanguages] NEW value - Count: {value?.Count ?? 0}, Languages: [{string.Join(", ", value ?? new List<string>())}]");
+
+                    // Deduplicate to prevent duplicates from ever being stored
+                    if (value != null)
+                    {
+                        var originalCount = value.Count;
+                        var deduplicated = value.Distinct().ToList();
+                        if (originalCount != deduplicated.Count)
+                        {
+                            Serilog.Log.Warning($"[AppSettings.SelectedLanguages] Deduplicating languages from {originalCount} to {deduplicated.Count} items");
+                            _selectedLanguages = deduplicated;
+                        }
+                        else
+                        {
+                            _selectedLanguages = value;
+                        }
+                    }
+                    else
+                    {
+                        _selectedLanguages = value;
+                    }
+
+                    Serilog.Log.Information($"[AppSettings.SelectedLanguages] AFTER set - Count: {_selectedLanguages?.Count ?? 0}, Languages: [{string.Join(", ", _selectedLanguages ?? new List<string>())}]");
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool UseAIEnhancedOCR
+        {
+            get => _useAIEnhancedOCR;
+            set
+            {
+                if (_useAIEnhancedOCR != value)
+                {
+                    _useAIEnhancedOCR = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string AIProvider
+        {
+            get => _aiProvider;
+            set
+            {
+                if (_aiProvider != value)
+                {
+                    _aiProvider = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // NVIDIA Build Settings
+        public string NvidiaApiKey
+        {
+            get => _nvidiaApiKey;
+            set
+            {
+                if (_nvidiaApiKey != value)
+                {
+                    _nvidiaApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string NvidiaModel
+        {
+            get => _nvidiaModel;
+            set
+            {
+                if (_nvidiaModel != value)
+                {
+                    _nvidiaModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // OpenAI Settings (for future use)
+        public string OpenAIApiKey
+        {
+            get => _openAIApiKey;
+            set
+            {
+                if (_openAIApiKey != value)
+                {
+                    _openAIApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string OpenAIModel
+        {
+            get => _openAIModel;
+            set
+            {
+                if (_openAIModel != value)
+                {
+                    _openAIModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // Google Gemini Settings (for future use)
+        public string GeminiApiKey
+        {
+            get => _geminiApiKey;
+            set
+            {
+                if (_geminiApiKey != value)
+                {
+                    _geminiApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string GeminiModel
+        {
+            get => _geminiModel;
+            set
+            {
+                if (_geminiModel != value)
+                {
+                    _geminiModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // Custom Endpoint Settings (for future use)
+        public string CustomEndpointUrl
+        {
+            get => _customEndpointUrl;
+            set
+            {
+                if (_customEndpointUrl != value)
+                {
+                    _customEndpointUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string CustomEndpointApiKey
+        {
+            get => _customEndpointApiKey;
+            set
+            {
+                if (_customEndpointApiKey != value)
+                {
+                    _customEndpointApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string CustomEndpointModel
+        {
+            get => _customEndpointModel;
+            set
+            {
+                if (_customEndpointModel != value)
+                {
+                    _customEndpointModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // UI State Properties
+        public bool DebugSettingsExpanded
+        {
+            get => _debugSettingsExpanded;
+            set
+            {
+                if (_debugSettingsExpanded != value)
+                {
+                    _debugSettingsExpanded = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool OCRSettingsExpanded
+        {
+            get => _ocrSettingsExpanded;
+            set
+            {
+                if (_ocrSettingsExpanded != value)
+                {
+                    _ocrSettingsExpanded = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool AISettingsExpanded
+        {
+            get => _aiSettingsExpanded;
+            set
+            {
+                if (_aiSettingsExpanded != value)
+                {
+                    _aiSettingsExpanded = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool HotkeySettingsExpanded
+        {
+            get => _hotkeySettingsExpanded;
+            set
+            {
+                if (_hotkeySettingsExpanded != value)
+                {
+                    _hotkeySettingsExpanded = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool ExportSettingsExpanded
+        {
+            get => _exportSettingsExpanded;
+            set
+            {
+                if (_exportSettingsExpanded != value)
+                {
+                    _exportSettingsExpanded = value;
                     OnPropertyChanged();
                 }
             }

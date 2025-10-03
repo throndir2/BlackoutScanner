@@ -5,6 +5,8 @@ using Newtonsoft.Json;
 using Serilog;
 using Serilog.Events;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 
 namespace BlackoutScanner.Services
@@ -47,10 +49,23 @@ namespace BlackoutScanner.Services
                     var loadedSettings = JsonConvert.DeserializeObject<AppSettings>(json);
                     if (loadedSettings != null)
                     {
-                        Log.Information($"[SettingsManager.LoadSettings] Deserialized settings: SaveDebugImages={loadedSettings.SaveDebugImages}, LogLevel={loadedSettings.LogLevel}");
+                        Log.Information($"[SettingsManager.LoadSettings] Deserialized settings: SaveDebugImages={loadedSettings.SaveDebugImages}, LogLevel={loadedSettings.LogLevel}, SelectedLanguages count={loadedSettings.SelectedLanguages?.Count ?? 0}");
+                        Log.Information($"[SettingsManager.LoadSettings] Deserialized SelectedLanguages: [{string.Join(", ", loadedSettings.SelectedLanguages ?? new List<string>())}]");
+
+                        // Deduplicate languages in case of corrupted config file
+                        if (loadedSettings.SelectedLanguages != null)
+                        {
+                            var originalCount = loadedSettings.SelectedLanguages.Count;
+                            loadedSettings.SelectedLanguages = loadedSettings.SelectedLanguages.Distinct().ToList();
+                            if (originalCount != loadedSettings.SelectedLanguages.Count)
+                            {
+                                Log.Warning($"[SettingsManager.LoadSettings] Deduplicated SelectedLanguages from {originalCount} to {loadedSettings.SelectedLanguages.Count} items");
+                            }
+                        }
 
                         _settings = loadedSettings;
                         Log.Information($"[SettingsManager.LoadSettings] Settings loaded from {_settingsFilePath}");
+                        Log.Information($"[SettingsManager.LoadSettings] AFTER assignment - _settings.SelectedLanguages count={_settings.SelectedLanguages?.Count ?? 0}: [{string.Join(", ", _settings.SelectedLanguages ?? new List<string>())}]");
                     }
                     else
                     {
@@ -94,9 +109,6 @@ namespace BlackoutScanner.Services
         {
             try
             {
-                Log.Information($"[SettingsManager.SaveSettings] Starting to save settings...");
-                Log.Information($"[SettingsManager.SaveSettings] Current settings: SaveDebugImages={_settings.SaveDebugImages}, LogLevel={_settings.LogLevel}");
-
                 // Apply log level to UI sink immediately when saving
                 if (Enum.TryParse<LogEventLevel>(_settings.LogLevel, out var logLevel))
                 {
@@ -105,13 +117,11 @@ namespace BlackoutScanner.Services
                 }
 
                 var json = JsonConvert.SerializeObject(_settings, Formatting.Indented);
-                Log.Debug($"[SettingsManager.SaveSettings] Settings JSON to save: {json}");
 
                 // Before saving, check if the file already exists and what it contains
                 if (File.Exists(_settingsFilePath))
                 {
                     var existingJson = File.ReadAllText(_settingsFilePath);
-                    Log.Debug($"[SettingsManager.SaveSettings] Existing JSON before save: {existingJson}");
                     try
                     {
                         var existingSettings = JsonConvert.DeserializeObject<AppSettings>(existingJson);
@@ -133,8 +143,6 @@ namespace BlackoutScanner.Services
                 if (File.Exists(_settingsFilePath))
                 {
                     var savedJson = File.ReadAllText(_settingsFilePath);
-                    Log.Debug($"[SettingsManager.SaveSettings] Verified saved JSON: {savedJson}");
-
                     // Parse the saved JSON to verify the settings were properly saved
                     try
                     {

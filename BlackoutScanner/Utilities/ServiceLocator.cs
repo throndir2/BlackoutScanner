@@ -20,14 +20,9 @@ namespace BlackoutScanner.Utilities
         {
             var services = new ServiceCollection();
 
-            // Configure Serilog
-            var serilogLogger = new Serilog.LoggerConfiguration()
-                .MinimumLevel.Debug()
-                .WriteTo.File("logs/blackoutscanner-.log", rollingInterval: RollingInterval.Day)
-                .CreateLogger();
-
-            // Register Logger
-            services.AddSingleton(serilogLogger);
+            // Use the already-configured global Serilog logger from App.xaml.cs
+            // DO NOT create a new logger here - it would miss the UI sink!
+            services.AddSingleton(Log.Logger);
 
             // Register Infrastructure Services
             services.AddSingleton<IFileSystem, FileSystem>();
@@ -49,6 +44,10 @@ namespace BlackoutScanner.Utilities
             services.AddSingleton<IScreenCapture, ScreenCapture>();
             services.AddSingleton<IHotKeyManager, HotKeyManager>();
 
+            // Register AI Services
+            services.AddSingleton<INvidiaAIService, NvidiaAIService>();
+            services.AddSingleton<IAIQueueProcessor, AIQueueProcessor>();
+
             // Register slow-initializing OCR-related services last with error handling
             services.AddSingleton<IOCRProcessor>(provider =>
             {
@@ -67,11 +66,33 @@ namespace BlackoutScanner.Utilities
                     throw;
                 }
             });
-            services.AddSingleton<IScanner, Scanner>();
+            services.AddSingleton<IScanner>(provider =>
+            {
+                try
+                {
+                    Log.Information("Initializing Scanner...");
+                    return new Scanner(
+                        provider.GetRequiredService<IDataManager>(),
+                        provider.GetRequiredService<IOCRProcessor>(),
+                        provider.GetRequiredService<IScreenCapture>(),
+                        provider.GetRequiredService<IAIQueueProcessor>(),
+                        provider.GetRequiredService<ISettingsManager>()
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Failed to initialize Scanner");
+                    throw;
+                }
+            });
 
             Log.Information("Service Locator successfully configured all services");
 
             _serviceProvider = services.BuildServiceProvider();
+
+            // Note: OCRProcessor.Initialize() will be called from App.xaml.cs after UI shows
+            // This allows the UI to appear before Tesseract engines are initialized
+            Log.Information("Service provider built successfully - OCR will initialize after UI shows");
         }
 
         public static T GetService<T>() where T : class

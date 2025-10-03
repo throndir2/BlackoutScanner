@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:BlackoutScanner"
+        xmlns:views="clr-namespace:BlackoutScanner.Views"
         xmlns:converters="clr-namespace:BlackoutScanner.Converters"
         mc:Ignorable="d"
         Title="Blackout Scanner"
@@ -108,12 +109,18 @@
                                 </StackPanel>
                         </TabItem>
 
+                        <!-- Tab for AI Queue Monitor -->
+                        <TabItem Header="AI Queue Monitor">
+                                <views:AIQueueMonitorView x:Name="aiQueueMonitorView"/>
+                        </TabItem>
+
                         <!-- Tab for Configuration -->
                         <TabItem Header="Configuration">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                                               HorizontalScrollBarVisibility="Disabled">
                                         <Grid Margin="10">
                                                 <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
@@ -213,7 +220,9 @@
                                                 <!-- Debug Settings Section (Collapsible) -->
                                                 <Expander Grid.Row="1"
                                                           Header="Debug Settings"
-                                                          IsExpanded="False"
+                                                          IsExpanded="{Binding Path=SettingsManager.Settings.DebugSettingsExpanded, Mode=TwoWay}"
+                                                          Expanded="Expander_ExpandedCollapsed"
+                                                          Collapsed="Expander_ExpandedCollapsed"
                                                           Margin="0,0,0,10">
                                                         <Grid Margin="10">
                                                                 <Grid.RowDefinitions>
@@ -293,7 +302,9 @@
                                                 <!-- OCR Settings (Collapsible) -->
                                                 <Expander Grid.Row="2"
                                                           Header="OCR Settings"
-                                                          IsExpanded="True"
+                                                          IsExpanded="{Binding Path=SettingsManager.Settings.OCRSettingsExpanded, Mode=TwoWay}"
+                                                          Expanded="Expander_ExpandedCollapsed"
+                                                          Collapsed="Expander_ExpandedCollapsed"
                                                           Margin="0,0,0,10">
                                                         <Grid Margin="10">
                                                                 <Grid.RowDefinitions>
@@ -382,10 +393,155 @@
                                                         </Grid>
                                                 </Expander>
 
-                                                <!-- Hotkey Settings (Collapsible) -->
+                                                <!-- AI Enhancement Settings (New) -->
                                                 <Expander Grid.Row="3"
+                                                          Header="AI Enhancement Settings"
+                                                          IsExpanded="{Binding Path=SettingsManager.Settings.AISettingsExpanded, Mode=TwoWay}"
+                                                          Expanded="Expander_ExpandedCollapsed"
+                                                          Collapsed="Expander_ExpandedCollapsed"
+                                                          Margin="0,0,0,10">
+                                                        <Grid Margin="10">
+                                                                <Grid.RowDefinitions>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                </Grid.RowDefinitions>
+                                                                <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"
+                                                                                        MinWidth="150"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <!-- Enable AI Enhancement -->
+                                                                <CheckBox Grid.Row="0"
+                                                                          Grid.Column="0"
+                                                                          Grid.ColumnSpan="3"
+                                                                          x:Name="useAIEnhancedOCRCheckBox"
+                                                                          Content="Enable AI-Enhanced OCR (requires API key)"
+                                                                          ToolTip="When enabled, uses AI services to improve OCR accuracy for low-confidence results"
+                                                                          IsChecked="{Binding Path=SettingsManager.Settings.UseAIEnhancedOCR, Mode=TwoWay}"
+                                                                          Margin="0,5,0,10"
+                                                                          Checked="AISettings_Changed"
+                                                                          Unchecked="AISettings_Changed"/>
+
+                                                                <!-- AI Provider Selection -->
+                                                                <TextBlock Grid.Row="1"
+                                                                           Grid.Column="0"
+                                                                           Text="AI Provider:"
+                                                                           VerticalAlignment="Center"
+                                                                           Margin="0,5,10,5"/>
+                                                                <ComboBox Grid.Row="1"
+                                                                          Grid.Column="1"
+                                                                          x:Name="aiProviderComboBox"
+                                                                          IsEnabled="{Binding ElementName=useAIEnhancedOCRCheckBox, Path=IsChecked}"
+                                                                          SelectedValue="{Binding Path=SettingsManager.Settings.AIProvider, Mode=TwoWay}"
+                                                                          SelectedValuePath="Tag"
+                                                                          SelectionChanged="AIProviderComboBox_SelectionChanged"
+                                                                          Margin="0,5,0,5">
+                                                                        <ComboBoxItem Content="None"
+                                                                                        Tag="None"/>
+                                                                        <ComboBoxItem Content="NVIDIA Build"
+                                                                                        Tag="NvidiaBuild"/>
+                                                                        <ComboBoxItem Content="OpenAI (Coming Soon)"
+                                                                                        Tag="OpenAI"
+                                                                                        IsEnabled="False"/>
+                                                                        <ComboBoxItem Content="Google Gemini (Coming Soon)"
+                                                                                        Tag="Gemini"
+                                                                                        IsEnabled="False"/>
+                                                                        <ComboBoxItem Content="Custom Endpoint (Coming Soon)"
+                                                                                        Tag="Custom"
+                                                                                        IsEnabled="False"/>
+                                                                </ComboBox>
+
+                                                                <!-- NVIDIA Build Settings -->
+                                                                <GroupBox Grid.Row="2"
+                                                                          Grid.Column="0"
+                                                                          Grid.ColumnSpan="3"
+                                                                          Header="NVIDIA Build Settings"
+                                                                          x:Name="nvidiaSettingsGroup"
+                                                                          Visibility="Collapsed"
+                                                                          Margin="0,10,0,5">
+                                                                        <Grid Margin="5">
+                                                                                <Grid.RowDefinitions>
+                                                                                        <RowDefinition Height="Auto"/>
+                                                                                        <RowDefinition Height="Auto"/>
+                                                                                        <RowDefinition Height="Auto"/>
+                                                                                </Grid.RowDefinitions>
+                                                                                <Grid.ColumnDefinitions>
+                                                                                        <ColumnDefinition Width="Auto"
+                                                                                                        MinWidth="100"/>
+                                                                                        <ColumnDefinition Width="*"/>
+                                                                                </Grid.ColumnDefinitions>
+
+                                                                                <!-- API Key -->
+                                                                                <TextBlock Grid.Row="0"
+                                                                                           Grid.Column="0"
+                                                                                           Text="API Key:"
+                                                                                           VerticalAlignment="Center"
+                                                                                           Margin="0,5,10,5"/>
+                                                                                <PasswordBox Grid.Row="0"
+                                                                                             Grid.Column="1"
+                                                                                             x:Name="nvidiaApiKeyBox"
+                                                                                             PasswordChanged="NvidiaApiKey_Changed"
+                                                                                             Margin="0,5,0,5"/>
+
+                                                                                <!-- Model Selection -->
+                                                                                <TextBlock Grid.Row="1"
+                                                                                           Grid.Column="0"
+                                                                                           Text="Model:"
+                                                                                           VerticalAlignment="Center"
+                                                                                           Margin="0,5,10,5"/>
+                                                                                <ComboBox Grid.Row="1"
+                                                                                          Grid.Column="1"
+                                                                                          x:Name="nvidiaModelComboBox"
+                                                                                          SelectedValue="{Binding Path=SettingsManager.Settings.NvidiaModel, Mode=TwoWay}"
+                                                                                          SelectedValuePath="Tag"
+                                                                                          SelectionChanged="NvidiaModel_SelectionChanged"
+                                                                                          Margin="0,5,0,5">
+                                                                                        <ComboBoxItem Content="Microsoft Kosmos-2 (General Vision)"
+                                                                                                        Tag="microsoft/kosmos-2"/>
+                                                                                        <ComboBoxItem Content="PaddleOCR (Text Detection)"
+                                                                                                        Tag="nvidia/paddleocr"/>
+                                                                                        <ComboBoxItem Content="Nemo Retriever OCR v1 (Document OCR)"
+                                                                                                        Tag="nvidia/nemoretriever-ocr-v1"/>
+                                                                                </ComboBox>
+
+                                                                                <!-- Test Connection Button -->
+                                                                                <Button Grid.Row="2"
+                                                                                        Grid.Column="0"
+                                                                                        Grid.ColumnSpan="2"
+                                                                                        Content="Test Connection"
+                                                                                        x:Name="testNvidiaConnectionButton"
+                                                                                        Click="TestNvidiaConnection_Click"
+                                                                                        Margin="0,10,0,5"
+                                                                                        HorizontalAlignment="Center"
+                                                                                        Width="150"/>
+                                                                        </Grid>
+                                                                </GroupBox>
+
+                                                                <!-- Status/Info Text -->
+                                                                <TextBlock Grid.Row="5"
+                                                                           Grid.Column="0"
+                                                                           Grid.ColumnSpan="3"
+                                                                           x:Name="aiStatusText"
+                                                                           Text="AI enhancement is disabled"
+                                                                           Foreground="Gray"
+                                                                           FontStyle="Italic"
+                                                                           Margin="0,10,0,0"
+                                                                           TextWrapping="Wrap"/>
+                                                        </Grid>
+                                                </Expander>
+
+                                                <!-- Hotkey Settings (Collapsible) -->
+                                                <Expander Grid.Row="4"
                                                           Header="Hotkey Settings"
-                                                          IsExpanded="False"
+                                                          IsExpanded="{Binding Path=SettingsManager.Settings.HotkeySettingsExpanded, Mode=TwoWay}"
+                                                          Expanded="Expander_ExpandedCollapsed"
+                                                          Collapsed="Expander_ExpandedCollapsed"
                                                           Margin="0,0,0,10">
                                                         <Grid Margin="10">
                                                                 <Grid.ColumnDefinitions>
@@ -414,9 +570,11 @@
                                                 </Expander>
 
                                                 <!-- Export Settings (Collapsible) -->
-                                                <Expander Grid.Row="4"
+                                                <Expander Grid.Row="5"
                                                           Header="Export Settings"
-                                                          IsExpanded="False"
+                                                          IsExpanded="{Binding Path=SettingsManager.Settings.ExportSettingsExpanded, Mode=TwoWay}"
+                                                          Expanded="Expander_ExpandedCollapsed"
+                                                          Collapsed="Expander_ExpandedCollapsed"
                                                           Margin="0,0,0,10">
                                                         <StackPanel Margin="10">
                                                                 <Label Content="Export Folder:"/>

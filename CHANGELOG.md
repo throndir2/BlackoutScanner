@@ -1,6 +1,24 @@
 ```markdown
 # Blackout Scanner Changelog
 
+## [2.1.0] - 2025-10-03
+
+### Added
+- **AI Queue Processor**: Automatically enhances low-confidence Tesseract OCR results using AI
+  - Background processing queue for AI-enhanced OCR
+  - NVIDIA Build API integration with support for multiple OCR models
+  - Configurable confidence threshold to trigger AI enhancement
+  - AI Enhancement Settings in Configuration tab with provider selection and API key management
+  - Real-time monitoring window showing queue status and processing metrics
+- Extensible AI provider framework for future integration with OpenAI, Google Gemini, and custom endpoints
+
+### Fixed
+- OCR cache not properly storing AI-enhanced confidence levels, causing unnecessary re-processing
+- AI confidence values not persisting correctly after app restart
+
+### Changed
+- Configuration sections now remember their expanded/collapsed state across app sessions
+
 ## [2.0.6] - 2025-10-02
 
 ### Added

@@ -49,8 +49,9 @@ namespace BlackoutScanner.Services
             _tessdataDirectory = Path.GetFullPath("tessdata"); // Use absolute path
             _currentLanguages = _settingsManager.Settings.SelectedLanguages ?? new List<string> { "eng", "kor", "jpn", "chi_sim", "chi_tra", "rus" };
 
-            // Lazy initialization - don't initialize engines in constructor
-            // This prevents issues during DI container setup
+            // Note: Call Initialize() after UI is shown to eagerly load Tesseract engines
+            // Constructor completes quickly to allow UI to appear first
+            Log.Information("OCRProcessor constructor: Created (waiting for Initialize() call)");
         }
 
         // For testing and specific configurations
@@ -62,26 +63,49 @@ namespace BlackoutScanner.Services
             _tessdataDirectory = Path.GetFullPath(tessdataDirectory ?? throw new ArgumentNullException(nameof(tessdataDirectory)));
             _currentLanguages = supportedLanguages?.ToList() ?? throw new ArgumentNullException(nameof(supportedLanguages));
 
-            // Lazy initialization - don't initialize engines in constructor
+            // Note: Call Initialize() after UI is shown to eagerly load Tesseract engines
+            Log.Information("OCRProcessor constructor (test): Created (waiting for Initialize() call)");
         }
 
-        // Lazy initialization method
+        /// <summary>
+        /// Public method to eagerly initialize OCR engines.
+        /// Can be called from background thread after UI is shown.
+        /// </summary>
+        public void Initialize()
+        {
+            EnsureInitialized();
+        }
+
+        // Internal initialization method
         private void EnsureInitialized()
         {
+            // Fast path - already initialized
             if (_isInitialized || _isDisposed) return;
 
+            // Use semaphore to ensure only one thread initializes at a time
             _initializationSemaphore.Wait();
             try
             {
+                // Double-check after acquiring semaphore
                 if (_isInitialized || _isDisposed) return;
 
                 // Initialize with global lock to prevent any concurrent Tesseract operations
                 lock (_globalTesseractLock)
                 {
+                    // Triple-check inside lock (paranoid but safe)
+                    if (_isInitialized || _isDisposed) return;
+
+                    Log.Information("EnsureInitialized: Beginning Tesseract engine initialization");
                     InitializeTesseractEnginesInternal(_currentLanguages, _tessdataDirectory);
                     _isInitialized = true;
                     _globalInitialized = true;
+                    Log.Information("EnsureInitialized: Tesseract engine initialization complete");
                 }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "EnsureInitialized: Failed to initialize Tesseract engines");
+                throw;
             }
             finally
             {
@@ -105,7 +129,7 @@ namespace BlackoutScanner.Services
         }
 
         // Updates the OCR result for a given image hash with manually corrected text.
-        public void UpdateCacheResult(string imageHash, string correctedText)
+        public void UpdateCacheResult(string imageHash, string correctedText, float confidence = 100f)
         {
             // Check if the result is already in the cache
             if (ocrResultsCache.TryGetValue(imageHash, out OCRResult? cachedResult))
@@ -118,14 +142,17 @@ namespace BlackoutScanner.Services
                 var updatedConfidences = new List<(string Word, float Confidence)>();
                 foreach (var word in correctedWords)
                 {
-                    // Assuming 100% confidence for manually corrected words
-                    updatedConfidences.Add((word, 100f));
+                    // Use the provided confidence (100% for manual corrections, AI confidence for AI results)
+                    updatedConfidences.Add((word, confidence));
                 }
+
+                // Update the WordConfidences with the new confidence values
+                cachedResult.WordConfidences = updatedConfidences;
 
                 // Save the updated result back to the cache
                 ocrResultsCache[imageHash] = cachedResult;
 
-                Log.Information($"Updated OCR result in cache for image hash: {imageHash}");
+                Log.Information($"Updated OCR result in cache for image hash: {imageHash} with confidence: {confidence:F2}%");
             }
         }
 
@@ -257,7 +284,17 @@ namespace BlackoutScanner.Services
 
         public OCRResult ProcessImage(Bitmap bitmap, string category = "", string fieldName = "")
         {
-            EnsureInitialized(); // Ensure engines are initialized before use
+            // Ensure fully initialized before processing
+            if (!_isInitialized)
+            {
+                Log.Warning($"ProcessImage called before initialization complete. Forcing initialization now.");
+                EnsureInitialized();
+            }
+
+            if (_isDisposed)
+            {
+                throw new ObjectDisposedException(nameof(OCRProcessor), "Cannot process image - OCRProcessor has been disposed");
+            }
 
             // Get values from settings instead of hardcoding
             int attempt = 0;
@@ -273,13 +310,31 @@ namespace BlackoutScanner.Services
                 Log.Debug($"[OCRProcessor.ProcessImage] _settingsManager.Settings.SaveDebugImages={_settingsManager.Settings.SaveDebugImages}");
             }
 
-            return ProcessImageWithFallback(bitmap, attempt, numericalOnly, saveDebugImages, debugImagesFolder, verboseLogging, category, fieldName);
+            // Start timing
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var result = ProcessImageWithFallback(bitmap, attempt, numericalOnly, saveDebugImages, debugImagesFolder, verboseLogging, category, fieldName);
+            stopwatch.Stop();
+
+            // Record processing time
+            result.ProcessingTimeMs = stopwatch.ElapsedMilliseconds;
+
+            return result;
         }
 
         // Process image with fallback to different OCR engines if needed
         public OCRResult ProcessImageWithFallback(Bitmap bitmap, int attempt, bool numericalOnly, bool saveDebugImages = false, string debugImagesFolder = "DebugImages", bool verboseLogging = false, string category = "", string fieldName = "")
         {
-            EnsureInitialized(); // Ensure engines are initialized before use
+            // Ensure fully initialized before processing
+            if (!_isInitialized)
+            {
+                Log.Warning($"ProcessImageWithFallback called before initialization complete. Forcing initialization now.");
+                EnsureInitialized();
+            }
+
+            if (_isDisposed)
+            {
+                throw new ObjectDisposedException(nameof(OCRProcessor), "Cannot process image - OCRProcessor has been disposed");
+            }
 
             Log.Debug($"[OCRProcessor.ProcessImageWithFallback] Called with saveDebugImages={saveDebugImages}, category='{category}', field='{fieldName}'");
 

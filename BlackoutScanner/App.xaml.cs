@@ -3,6 +3,7 @@ using Serilog.Events;
 using System;
 using System.Windows;
 using BlackoutScanner.Infrastructure;
+using BlackoutScanner.Interfaces;
 using BlackoutScanner.Utilities;
 
 namespace BlackoutScanner
@@ -30,10 +31,22 @@ namespace BlackoutScanner
             {
                 base.OnStartup(e);
 
-                // Configure ServiceLocator after Serilog
+                // Configure ServiceLocator BEFORE creating MainWindow
+                // This ensures all services (especially OCRProcessor) are ready before MainWindow is created
+                Log.Information("=== APPLICATION STARTUP: Configuring ServiceLocator ===");
                 ServiceLocator.Configure();
+                Log.Information("=== APPLICATION STARTUP: ServiceLocator configured successfully ===");
 
                 SetProcessDpiAwareness();
+
+                // NOW create and show MainWindow AFTER all services are initialized
+                Log.Information("=== APPLICATION STARTUP: Creating MainWindow ===");
+                var mainWindow = new Views.MainWindow();
+                mainWindow.Show();
+                Log.Information("=== APPLICATION STARTUP: MainWindow created and shown ===");
+
+                // Note: OCR initialization will happen in MainWindow.InitializeAppComponents()
+                // after the UI is shown, to prevent blocking the UI thread
             }
             catch (Exception ex)
             {
@@ -59,8 +72,18 @@ namespace BlackoutScanner
 
         protected override void OnExit(ExitEventArgs e)
         {
-            // Flush and close Serilog
-            Log.CloseAndFlush();
+            try
+            {
+                Log.Information("Application exiting...");
+
+                // Flush and close Serilog
+                // Note: MainWindow.OnClosed also calls this, but it's safe to call multiple times
+                Log.CloseAndFlush();
+            }
+            catch
+            {
+                // Ignore errors during shutdown
+            }
 
             base.OnExit(e);
         }

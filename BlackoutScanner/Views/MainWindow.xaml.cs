@@ -3,6 +3,7 @@ using BlackoutScanner.Infrastructure;
 using BlackoutScanner.Models;
 using BlackoutScanner.Services;
 using BlackoutScanner.Utilities;
+using BlackoutScanner.ViewModels;
 using Newtonsoft.Json;
 using Serilog;
 using Serilog.Events;
@@ -40,7 +41,10 @@ namespace BlackoutScanner.Views
         private IGameProfileManager? _gameProfileManager;
         private ISettingsManager? _settingsManager;
         private IHotKeyManager? _hotKeyManager;
-        private bool _isCapturingHotKey = false; public IGameProfileManager? GameProfileManager
+        private IAIQueueProcessor? _aiQueueProcessor;
+        private AIQueueMonitorViewModel? _aiQueueMonitorViewModel;
+        private bool _isCapturingHotKey = false;
+        private bool _isShuttingDown = false; public IGameProfileManager? GameProfileManager
         {
             get => _gameProfileManager;
             private set
@@ -76,6 +80,7 @@ namespace BlackoutScanner.Views
         private readonly string[] SupportedLanguages = { "eng", "kor", "jpn", "chi_sim", "chi_tra" };
         private readonly string cacheFilePath = "ocrCache.json";
         private Dictionary<string, List<LanguageInfo>>? _languagesByScript;
+        private bool _isInitializingLanguages = false;
 
         private Dictionary<string, TextBox> fieldTextBoxes = new Dictionary<string, TextBox>();
         private Dictionary<string, WinImage> fieldImages = new Dictionary<string, WinImage>();
@@ -182,10 +187,178 @@ namespace BlackoutScanner.Views
             });
         }
 
+        private void UpdateLastLogMessage(string message, int count)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] UpdateLastLogMessage called with count={count}");
+
+            // Update the last line in the log area with a counter
+            Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    // Find the logArea TextBox by name
+                    var logTextBox = FindName("logArea") as System.Windows.Controls.TextBox;
+                    if (logTextBox == null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[MainWindow] logArea TextBox is NULL!");
+                        return;
+                    }
+
+                    if (string.IsNullOrEmpty(logTextBox.Text))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[MainWindow] logArea.Text is empty!");
+                        return;
+                    }
+
+                    // Save current scroll position and selection
+                    var scrollViewer = FindVisualChild<System.Windows.Controls.ScrollViewer>(logTextBox);
+                    var wasAtBottom = IsScrolledToBottom(logTextBox);
+                    var savedVerticalOffset = scrollViewer?.VerticalOffset ?? 0;
+                    var savedSelectionStart = logTextBox.SelectionStart;
+                    var savedSelectionLength = logTextBox.SelectionLength;
+                    var hasSelection = savedSelectionLength > 0;
+
+                    System.Diagnostics.Debug.WriteLine($"[MainWindow] logArea found, text length={logTextBox.Text.Length}, wasAtBottom={wasAtBottom}, hasSelection={hasSelection}");
+
+                    // Get the current text
+                    var currentText = logTextBox.Text;
+                    var lastNewLineIndex = currentText.LastIndexOf('\n', currentText.Length - 2); // -2 to skip trailing newline
+
+                    if (lastNewLineIndex < 0)
+                    {
+                        // Only one line in the log
+                        lastNewLineIndex = 0;
+                    }
+                    else
+                    {
+                        lastNewLineIndex++; // Move past the newline character
+                    }
+
+                    // Get everything before the last line
+                    var beforeLastLine = currentText.Substring(0, lastNewLineIndex);
+
+                    // Get the last line (trim the trailing newline if present)
+                    var lastLine = currentText.Substring(lastNewLineIndex).TrimEnd('\r', '\n');
+
+                    System.Diagnostics.Debug.WriteLine($"[MainWindow] Last line before update: '{lastLine.Substring(0, Math.Min(60, lastLine.Length))}...'");
+
+                    // Remove any existing counter suffix (e.g., " [5]" or " (x5)")
+                    var baseMessage = System.Text.RegularExpressions.Regex.Replace(
+                        lastLine,
+                        @"\s*(?:\[\d+\]|\(x\d+\))$",
+                        "");
+
+                    // Create new line with counter in bracket format [3]
+                    var newLastLine = count > 1 ? $"{baseMessage} [{count}]" : baseMessage;
+
+                    System.Diagnostics.Debug.WriteLine($"[MainWindow] New last line: '{newLastLine.Substring(0, Math.Min(60, newLastLine.Length))}...'");
+
+                    // Calculate the length difference (text might be shorter or longer)
+                    var oldLength = currentText.Length;
+                    var newText = beforeLastLine + newLastLine + "\n";
+                    var lengthDiff = newText.Length - oldLength;
+
+                    // Update the text area
+                    logTextBox.Text = newText;
+
+                    // Only restore selection if:
+                    // 1. User had an active selection
+                    // 2. The selection is still within valid bounds
+                    // 3. The selection wasn't in the last line (which we just modified)
+                    if (hasSelection &&
+                        savedSelectionStart >= 0 &&
+                        savedSelectionStart < lastNewLineIndex) // Selection is BEFORE the last line
+                    {
+                        // Selection is in the unchanged part of the text, safe to restore
+                        logTextBox.SelectionStart = savedSelectionStart;
+                        logTextBox.SelectionLength = Math.Min(savedSelectionLength, newText.Length - savedSelectionStart);
+                        System.Diagnostics.Debug.WriteLine($"[MainWindow] Restored selection at {savedSelectionStart}");
+                    }
+                    else
+                    {
+                        // Clear selection to prevent auto-scroll to old position
+                        logTextBox.SelectionStart = 0;
+                        logTextBox.SelectionLength = 0;
+                        System.Diagnostics.Debug.WriteLine($"[MainWindow] Cleared selection (hasSelection={hasSelection}, inLastLine={savedSelectionStart >= lastNewLineIndex})");
+                    }
+
+                    // Restore scroll position
+                    if (wasAtBottom)
+                    {
+                        // User was at bottom, keep them there
+                        logTextBox.ScrollToEnd();
+                    }
+                    else
+                    {
+                        // User had scrolled up, restore their exact position
+                        scrollViewer?.ScrollToVerticalOffset(savedVerticalOffset);
+                    }
+
+                    System.Diagnostics.Debug.WriteLine($"[MainWindow] Successfully updated log area");
+                }
+                catch (Exception ex)
+                {
+                    // Log error but don't crash
+                    System.Diagnostics.Debug.WriteLine($"[MainWindow] Error updating last log message: {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Checks if the TextBox is scrolled to the bottom
+        /// </summary>
+        private bool IsScrolledToBottom(System.Windows.Controls.TextBox textBox)
+        {
+            try
+            {
+                // Get the vertical scroll position
+                var scrollViewer = FindVisualChild<System.Windows.Controls.ScrollViewer>(textBox);
+                if (scrollViewer != null)
+                {
+                    // Consider "at bottom" if within 10 pixels of the bottom
+                    // This accounts for rounding errors and makes it more user-friendly
+                    var threshold = 10.0;
+                    var atBottom = scrollViewer.VerticalOffset >= (scrollViewer.ScrollableHeight - threshold);
+                    return atBottom;
+                }
+
+                // Fallback: assume at bottom if we can't determine
+                return true;
+            }
+            catch
+            {
+                // If we can't determine, assume at bottom (safer default)
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Helper method to find a child element of a specific type in the visual tree
+        /// </summary>
+        private T? FindVisualChild<T>(System.Windows.DependencyObject parent) where T : System.Windows.DependencyObject
+        {
+            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                if (child is T typedChild)
+                {
+                    return typedChild;
+                }
+
+                var childOfChild = FindVisualChild<T>(child);
+                if (childOfChild != null)
+                {
+                    return childOfChild;
+                }
+            }
+            return null;
+        }
+
         private void SetupLoggingToUI()
         {
-            // Subscribe to the static event from UISink
+            // Subscribe to the static events from UISink
             BlackoutScanner.Infrastructure.UISink.LogMessage += OnLogMessage;
+            BlackoutScanner.Infrastructure.UISink.UpdateLastMessage += UpdateLastLogMessage;
         }
 
         private void OnLogMessage(string message)
@@ -204,14 +377,36 @@ namespace BlackoutScanner.Views
                 GameProfileManager = ServiceLocator.GetService<IGameProfileManager>();
                 SettingsManager = ServiceLocator.GetService<ISettingsManager>();
                 _hotKeyManager = ServiceLocator.GetService<IHotKeyManager>();
+                _aiQueueProcessor = ServiceLocator.GetService<IAIQueueProcessor>();
 
                 Log.Information($"[InitializeAppComponents] Got services, about to load settings");
+
+                // Initialize AI Queue Monitor ViewModel
+                _aiQueueMonitorViewModel = new AIQueueMonitorViewModel();
+                Dispatcher.Invoke(() =>
+                {
+                    if (aiQueueMonitorView != null)
+                    {
+                        aiQueueMonitorView.DataContext = _aiQueueMonitorViewModel;
+                    }
+                });
+
+                // Subscribe to AI Queue events
+                if (_aiQueueProcessor != null)
+                {
+                    _aiQueueProcessor.ItemProcessed += OnAIQueueItemProcessed;
+                    _aiQueueProcessor.Start();
+                    Log.Information("AI Queue Processor started and subscribed to events");
+                }
 
                 // Load debug settings from SettingsManager instead
                 LoadDebugSettingsFromManager();
 
                 // Initialize language selection
                 InitializeLanguageSelection();
+
+                // Initialize AI settings UI
+                InitializeAISettings();
 
                 // Schedule a verification for when UI is fully loaded
                 Dispatcher.BeginInvoke(new Action(() =>
@@ -261,10 +456,19 @@ namespace BlackoutScanner.Views
                 {
                     try
                     {
-                        Dispatcher.Invoke(() => AppendLogMessage("Initializing OCR components in background..."));
+                        Dispatcher.Invoke(() =>
+                        {
+                            AppendLogMessage("Initializing OCR engines (downloading language files if needed)...");
+                            if (FindName("scanButton") is Button scanBtn)
+                            {
+                                scanBtn.Content = "Initializing OCR...";
+                            }
+                        });
 
-                        // Get OCR processor - this is where the slow initialization happens
+                        // Get OCR processor and eagerly initialize it
                         ocrProcessor = ServiceLocator.GetService<IOCRProcessor>();
+                        ocrProcessor.Initialize(); // Eagerly initialize Tesseract engines
+
                         scanner = ServiceLocator.GetService<IScanner>();
 
                         // Load OCR cache
@@ -291,8 +495,13 @@ namespace BlackoutScanner.Views
 
                         Dispatcher.Invoke(() =>
                         {
-                            Log.Information("OCR components initialized successfully.");
-                            scanButton.IsEnabled = true;
+                            Log.Information("OCR engines initialized successfully.");
+                            AppendLogMessage("OCR engines ready. You can now start scanning.");
+                            if (FindName("scanButton") is Button scanBtn)
+                            {
+                                scanBtn.IsEnabled = true;
+                                scanBtn.Content = "Start Scanning";
+                            }
                         });
                     }
                     catch (Exception ex)
@@ -1218,6 +1427,20 @@ namespace BlackoutScanner.Views
                     {
                         existingRecord.Fields[field.Key] = field.Value;
                     }
+
+                    // Copy field confidences
+                    if (record.FieldConfidences != null)
+                    {
+                        if (existingRecord.FieldConfidences == null)
+                        {
+                            existingRecord.FieldConfidences = new Dictionary<string, float>();
+                        }
+                        foreach (var confidence in record.FieldConfidences)
+                        {
+                            existingRecord.FieldConfidences[confidence.Key] = confidence.Value;
+                        }
+                    }
+
                     existingRecord.ScanDate = record.ScanDate;
 
                     // Force UI refresh by removing and re-adding
@@ -2161,9 +2384,17 @@ namespace BlackoutScanner.Views
         }
 
         // Ensure to unsubscribe from the event when the window is closed to prevent memory leaks
-        protected override void OnClosing(CancelEventArgs e)
+        protected override async void OnClosing(CancelEventArgs e)
         {
-            if (dataManager != null && dataManager.HasUnsavedChanges()) // Need to add this tracking
+            // Prevent multiple shutdown attempts
+            if (_isShuttingDown)
+            {
+                base.OnClosing(e);
+                return;
+            }
+
+            // Check for unsaved changes first
+            if (dataManager != null && dataManager.HasUnsavedChanges())
             {
                 var result = MessageBox.Show(
                     "You have unsaved data. Do you want to save before closing?",
@@ -2185,33 +2416,81 @@ namespace BlackoutScanner.Views
                 }
             }
 
+            // Cancel the close temporarily so we can do async cleanup
+            e.Cancel = true;
+            _isShuttingDown = true;
+
+            Log.Information("Window closing, starting graceful shutdown...");
+
+            // Show a message to user that we're shutting down
+            if (this.IsLoaded)
+            {
+                this.Title = "BlackoutScanner - Shutting down...";
+            }
+
+            try
+            {
+                // Stop scanner first
+                if (scanner != null)
+                {
+                    Log.Information("Stopping scanner...");
+                    scanner.StopScanning();
+                    scanner.DataUpdated -= HandleDataUpdated;
+                    scanner.ImageUpdated -= HandleImageUpdated;
+                    scanner.ScanDateUpdated -= UpdateScanDate;
+                    scanner.CategoryScanning -= HandleCategoryScanning;
+                }
+
+                // Stop AI Queue Processor with proper async handling
+                if (_aiQueueProcessor != null)
+                {
+                    Log.Information("Stopping AI Queue Processor...");
+                    _aiQueueProcessor.ItemProcessed -= OnAIQueueItemProcessed;
+
+                    try
+                    {
+                        // Properly await the async stop operation
+                        await _aiQueueProcessor.StopAsync();
+                        Log.Information("AI Queue Processor stopped successfully");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Error stopping AI Queue Processor");
+                    }
+                }
+
+                // Stop any pending timers
+                if (autoSizeTimer != null && autoSizeTimer.IsEnabled)
+                {
+                    autoSizeTimer.Stop();
+                }
+
+                // Unsubscribe from UI logging
+                BlackoutScanner.Infrastructure.UISink.LogMessage -= OnLogMessage;
+                BlackoutScanner.Infrastructure.UISink.UpdateLastMessage -= UpdateLastLogMessage;
+
+                // Dispose of the hotkey manager
+                _hotKeyManager?.Dispose();
+
+                SaveOcrResultsCache();
+
+                Log.Information("Graceful shutdown complete, closing window...");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error during shutdown");
+            }
+
+            // Now actually close the window
             base.OnClosing(e);
+            this.Close();
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            // Stop any pending timers
-            if (autoSizeTimer != null && autoSizeTimer.IsEnabled)
-            {
-                autoSizeTimer.Stop();
-            }
-
-            // Unsubscribe from all events
-            if (scanner != null)
-            {
-                scanner.DataUpdated -= HandleDataUpdated;
-                scanner.ImageUpdated -= HandleImageUpdated;
-                scanner.ScanDateUpdated -= UpdateScanDate;
-                scanner.CategoryScanning -= HandleCategoryScanning;
-            }
-
-            // Unsubscribe from UI logging
-            BlackoutScanner.Infrastructure.UISink.LogMessage -= OnLogMessage;
-
-            // Dispose of the hotkey manager
-            _hotKeyManager?.Dispose();
-
-            SaveOcrResultsCache();
+            // Most cleanup is done in OnClosing, just flush logs here
+            Log.Information("Application shutdown complete");
+            Log.CloseAndFlush();
 
             base.OnClosed(e);
         }
@@ -2606,34 +2885,68 @@ namespace BlackoutScanner.Views
         {
             if (SettingsManager == null) return;
 
-            // Get languages grouped by script
-            _languagesByScript = LanguageHelper.GetLanguagesByScript();
+            // Log the initial state
+            var initialLanguages = SettingsManager.Settings.SelectedLanguages;
+            Log.Information($"[InitializeLanguageSelection] START - SelectedLanguages count: {initialLanguages?.Count ?? 0}, Languages: [{string.Join(", ", initialLanguages ?? new List<string>())}]");
 
-            // Set IsSelected based on current settings
-            var selectedLanguages = SettingsManager.Settings.SelectedLanguages;
-            foreach (var scriptGroup in _languagesByScript.Values)
+            // Set flag to prevent event handlers from running during initialization
+            _isInitializingLanguages = true;
+            Log.Information("[InitializeLanguageSelection] Set _isInitializingLanguages = true");
+
+            try
             {
-                foreach (var lang in scriptGroup)
+                // Get languages grouped by script
+                _languagesByScript = LanguageHelper.GetLanguagesByScript();
+
+                // Set IsSelected based on current settings
+                var selectedLanguages = SettingsManager.Settings.SelectedLanguages;
+                Log.Information($"[InitializeLanguageSelection] Setting IsSelected for languages based on: [{string.Join(", ", selectedLanguages)}]");
+
+                foreach (var scriptGroup in _languagesByScript.Values)
                 {
-                    lang.IsSelected = selectedLanguages.Contains(lang.Code);
+                    foreach (var lang in scriptGroup)
+                    {
+                        lang.IsSelected = selectedLanguages.Contains(lang.Code);
+                        if (lang.IsSelected)
+                        {
+                            Log.Debug($"[InitializeLanguageSelection] Setting {lang.Code} IsSelected = true");
+                        }
+                    }
                 }
+
+                // Bind to UI
+                Dispatcher.Invoke(() =>
+                {
+                    if (FindName("languagesList") is ItemsControl languagesList)
+                    {
+                        languagesList.ItemsSource = _languagesByScript;
+                        Log.Information("[InitializeLanguageSelection] Bound languagesList to UI");
+                    }
+                });
+
+                Log.Information($"[InitializeLanguageSelection] END - SelectedLanguages count: {SettingsManager.Settings.SelectedLanguages?.Count ?? 0}, Languages: [{string.Join(", ", SettingsManager.Settings.SelectedLanguages ?? new List<string>())}]");
             }
-
-            // Bind to UI
-            Dispatcher.Invoke(() =>
+            finally
             {
-                if (FindName("languagesList") is ItemsControl languagesList)
-                {
-                    languagesList.ItemsSource = _languagesByScript;
-                }
-            });
+                // Clear flag after initialization is complete
+                _isInitializingLanguages = false;
+                Log.Information("[InitializeLanguageSelection] Set _isInitializingLanguages = false");
+            }
         }
 
         private async void LanguageCheckBox_Changed(object sender, RoutedEventArgs e)
         {
+            // Ignore events during initialization to prevent duplicating the language list
+            if (_isInitializingLanguages)
+            {
+                Log.Information($"[LanguageCheckBox_Changed] BLOCKED - Event fired during initialization, ignoring");
+                return;
+            }
+
             if (sender is CheckBox checkBox && checkBox.Tag is string languageCode && SettingsManager != null)
             {
                 var isChecked = checkBox.IsChecked == true;
+                Log.Information($"[LanguageCheckBox_Changed] START - Language: {languageCode}, IsChecked: {isChecked}, Current SelectedLanguages count: {SettingsManager.Settings.SelectedLanguages?.Count ?? 0}");
 
                 // Get current selected languages
                 var selectedLanguages = new List<string>();
@@ -2647,6 +2960,7 @@ namespace BlackoutScanner.Views
                         }
                     }
                 }
+                Log.Information($"[LanguageCheckBox_Changed] Gathered selected languages from UI: [{string.Join(", ", selectedLanguages)}]");
 
                 // Validate at least one language is selected
                 if (!isChecked && selectedLanguages.Count == 1 && selectedLanguages[0] == languageCode)
@@ -2690,7 +3004,10 @@ namespace BlackoutScanner.Views
                             }
                         }
 
+                        Log.Information($"[LanguageCheckBox_Changed] BEFORE assignment - SettingsManager.Settings.SelectedLanguages count: {SettingsManager.Settings.SelectedLanguages?.Count ?? 0}");
+                        Log.Information($"[LanguageCheckBox_Changed] Assigning new list with count: {selectedLanguages.Count}, Languages: [{string.Join(", ", selectedLanguages)}]");
                         SettingsManager.Settings.SelectedLanguages = selectedLanguages;
+                        Log.Information($"[LanguageCheckBox_Changed] AFTER assignment - SettingsManager.Settings.SelectedLanguages count: {SettingsManager.Settings.SelectedLanguages?.Count ?? 0}, Languages: [{string.Join(", ", SettingsManager.Settings.SelectedLanguages)}]");
                         SettingsManager.SaveSettings();
 
                         // Update OCR processor in background
@@ -2721,6 +3038,234 @@ namespace BlackoutScanner.Views
             }
         }
 
+        // AI Enhancement Settings Methods
+        private void AISettings_Changed(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox checkBox && SettingsManager != null)
+            {
+                var useAIEnhanced = checkBox.IsChecked ?? false;
+                SettingsManager.Settings.UseAIEnhancedOCR = useAIEnhanced;
+
+                // Update status text
+                UpdateAIStatusText();
+
+                // Save settings
+                SettingsManager.SaveSettings();
+
+                Log.Information($"AI-Enhanced OCR {(useAIEnhanced ? "enabled" : "disabled")}");
+            }
+        }
+
+        private void AIProviderComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (sender is ComboBox comboBox && comboBox.SelectedItem is ComboBoxItem selectedItem && SettingsManager != null)
+            {
+                var provider = selectedItem.Tag?.ToString() ?? "None";
+                SettingsManager.Settings.AIProvider = provider;
+
+                // Show/hide provider-specific settings
+                UpdateAIProviderUI(provider);
+
+                // Update status text
+                UpdateAIStatusText();
+
+                // Save settings
+                SettingsManager.SaveSettings();
+
+                Log.Information($"AI Provider changed to: {provider}");
+            }
+        }
+
+        private void UpdateAIProviderUI(string provider)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                // Hide all provider settings first
+                if (FindName("nvidiaSettingsGroup") is GroupBox nvidiaGroup)
+                {
+                    nvidiaGroup.Visibility = Visibility.Collapsed;
+                }
+
+                // Show the selected provider's settings
+                switch (provider)
+                {
+                    case "NvidiaBuild":
+                        if (FindName("nvidiaSettingsGroup") is GroupBox nvidiaSettings)
+                        {
+                            nvidiaSettings.Visibility = Visibility.Visible;
+
+                            // Load saved API key if exists
+                            if (FindName("nvidiaApiKeyBox") is PasswordBox apiKeyBox && SettingsManager != null)
+                            {
+                                apiKeyBox.Password = SettingsManager.Settings.NvidiaApiKey;
+                            }
+                        }
+                        break;
+                        // Future providers will be added here
+                }
+            });
+        }
+
+        private void NvidiaApiKey_Changed(object sender, RoutedEventArgs e)
+        {
+            if (sender is PasswordBox passwordBox && SettingsManager != null)
+            {
+                SettingsManager.Settings.NvidiaApiKey = passwordBox.Password;
+                SettingsManager.SaveSettings();
+
+                // Update status text
+                UpdateAIStatusText();
+
+                // Enable/disable test button based on API key presence
+                if (FindName("testNvidiaConnectionButton") is Button testButton)
+                {
+                    testButton.IsEnabled = !string.IsNullOrWhiteSpace(passwordBox.Password);
+                }
+            }
+        }
+
+        private void NvidiaModel_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (sender is ComboBox comboBox && comboBox.SelectedItem is ComboBoxItem selectedItem && SettingsManager != null)
+            {
+                var model = selectedItem.Tag?.ToString() ?? "microsoft/kosmos-2";
+                SettingsManager.Settings.NvidiaModel = model;
+                SettingsManager.SaveSettings();
+
+                Log.Information($"NVIDIA model changed to: {model}");
+            }
+        }
+
+        private async void TestNvidiaConnection_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button)
+            {
+                button.IsEnabled = false;
+                button.Content = "Testing...";
+
+                try
+                {
+                    // Validate that we have the required settings
+                    if (SettingsManager == null || string.IsNullOrWhiteSpace(SettingsManager.Settings.NvidiaApiKey))
+                    {
+                        MessageBox.Show(
+                            "Please enter an API key before testing the connection.",
+                            "Missing API Key",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    // Get the NVIDIA AI service and test the connection
+                    var nvidiaService = ServiceLocator.GetService<INvidiaAIService>();
+
+                    // Update service configuration with current settings
+                    nvidiaService.UpdateConfiguration(
+                        SettingsManager.Settings.NvidiaApiKey,
+                        SettingsManager.Settings.NvidiaModel);
+
+                    // Test the connection
+                    Log.Information("Testing NVIDIA Build API connection...");
+                    bool isSuccessful = await nvidiaService.TestConnectionAsync();
+
+                    if (isSuccessful)
+                    {
+                        MessageBox.Show(
+                            $"Connection successful!\n\nProvider: NVIDIA Build\nModel: {SettingsManager.Settings.NvidiaModel}\n\nThe AI service is ready to use.",
+                            "Connection Test Passed",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+
+                        Log.Information("NVIDIA Build API connection test passed");
+                    }
+                    else
+                    {
+                        MessageBox.Show(
+                            "Connection test failed. Please check your API key and try again.\n\nCheck the log for more details.",
+                            "Connection Test Failed",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+
+                        Log.Warning("NVIDIA Build API connection test failed");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        $"Error testing connection:\n\n{ex.Message}\n\nPlease check your API key and network connection.",
+                        "Connection Test Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+
+                    Log.Error(ex, "Failed to test NVIDIA Build connection");
+                }
+                finally
+                {
+                    button.IsEnabled = true;
+                    button.Content = "Test Connection";
+                }
+            }
+        }
+
+        private void UpdateAIStatusText()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (FindName("aiStatusText") is TextBlock statusText && SettingsManager != null)
+                {
+                    if (!SettingsManager.Settings.UseAIEnhancedOCR)
+                    {
+                        statusText.Text = "AI enhancement is disabled";
+                        statusText.Foreground = new SolidColorBrush(Colors.Gray);
+                    }
+                    else if (SettingsManager.Settings.AIProvider == "None")
+                    {
+                        statusText.Text = "AI enhancement is enabled but no provider is selected";
+                        statusText.Foreground = new SolidColorBrush(Colors.Orange);
+                    }
+                    else if (SettingsManager.Settings.AIProvider == "NvidiaBuild")
+                    {
+                        if (string.IsNullOrWhiteSpace(SettingsManager.Settings.NvidiaApiKey))
+                        {
+                            statusText.Text = "NVIDIA Build selected but API key is missing";
+                            statusText.Foreground = new SolidColorBrush(Colors.Orange);
+                        }
+                        else
+                        {
+                            statusText.Text = $"NVIDIA Build configured with model: {SettingsManager.Settings.NvidiaModel}";
+                            statusText.Foreground = new SolidColorBrush(Colors.Green);
+                        }
+                    }
+                }
+            });
+        }
+
+        private void InitializeAISettings()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (SettingsManager != null)
+                {
+                    // Set initial UI state based on saved settings
+                    if (FindName("useAIEnhancedOCRCheckBox") is CheckBox aiCheckBox)
+                    {
+                        aiCheckBox.IsChecked = SettingsManager.Settings.UseAIEnhancedOCR;
+                    }
+
+                    if (FindName("aiProviderComboBox") is ComboBox providerCombo)
+                    {
+                        providerCombo.SelectedValue = SettingsManager.Settings.AIProvider;
+                    }
+
+                    // Update UI based on saved provider
+                    UpdateAIProviderUI(SettingsManager.Settings.AIProvider);
+
+                    // Update status text
+                    UpdateAIStatusText();
+                }
+            });
+        }
+
         // Handle the local time in exports checkbox
         private void UseLocalTimeCheckBox_Changed(object sender, RoutedEventArgs e)
         {
@@ -2734,6 +3279,200 @@ namespace BlackoutScanner.Views
                 // No need to refresh UI since this only affects exports
             }
         }
+
+        // Handle expander expanded/collapsed state changes
+        private void Expander_ExpandedCollapsed(object sender, RoutedEventArgs e)
+        {
+            // Save settings whenever an expander state changes
+            if (SettingsManager != null)
+            {
+                // The binding will automatically update the Settings object
+                // We just need to persist it to disk
+                SettingsManager.SaveSettings();
+
+                // Log the state change for debugging
+                if (sender is Expander expander)
+                {
+                    var headerText = expander.Header?.ToString() ?? "Unknown";
+                    var isExpanded = expander.IsExpanded;
+                    Log.Debug($"Expander '{headerText}' state changed to: {(isExpanded ? "Expanded" : "Collapsed")}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handles AI Queue item processed events and updates the UI.
+        /// </summary>
+        private void OnAIQueueItemProcessed(object? sender, AIOCRResult result)
+        {
+            try
+            {
+                Log.Information($"AI Queue item processed: Category={result.CategoryName}, Field={result.FieldName}, Success={result.Success}, TesseractTime={result.TesseractDurationMs}ms, AITime={result.AIDurationMs}ms");
+
+                // Update the AI Queue Monitor ViewModel
+                if (_aiQueueMonitorViewModel != null)
+                {
+                    Log.Debug($"[MainWindow] Updating ViewModel with result: OriginalText='{result.OriginalOCRText}', AIText='{result.Text}', TesseractDuration={result.TesseractDurationMs}ms");
+                    _aiQueueMonitorViewModel.MoveToProcessed(result);
+                    Log.Debug($"[MainWindow] ViewModel updated. ProcessedCount={_aiQueueMonitorViewModel.ProcessedCount}, AvgTesseract={_aiQueueMonitorViewModel.AverageTesseractMs:F2}ms, AvgAI={_aiQueueMonitorViewModel.AverageAIMs:F2}ms");
+                }
+                else
+                {
+                    Log.Warning($"[MainWindow] AIQueueMonitorViewModel is NULL, cannot update UI!");
+                }
+
+                // Optionally update the main UI with the enhanced OCR result
+                // (This would update the actual field in the scan tab with the AI result)
+                if (result.Success && !string.IsNullOrWhiteSpace(result.Text))
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        UpdateFieldWithAIResult(result);
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to process AI queue item result");
+            }
+        }
+
+        /// <summary>
+        /// Updates a field in the scan UI with the AI-enhanced OCR result.
+        /// Also updates the underlying DataRecord in DataManager and the Data tab's ObservableCollection.
+        /// </summary>
+        private void UpdateFieldWithAIResult(AIOCRResult result)
+        {
+            try
+            {
+                Log.Information($"[UpdateFieldWithAIResult] Processing AI result: Category='{result.CategoryName}', Field='{result.FieldName}', Text='{result.Text}', Confidence={result.Confidence:F2}%, ImageHash='{result.ImageHash}'");
+
+                // Cache the AI OCR result if we have the image hash
+                if (!string.IsNullOrEmpty(result.ImageHash) && ocrProcessor != null)
+                {
+                    ocrProcessor.UpdateCacheResult(result.ImageHash, result.Text, result.Confidence);
+                    Log.Information($"[UpdateFieldWithAIResult] Cached AI OCR result: ImageHash='{result.ImageHash}', Text='{result.Text}', Confidence={result.Confidence:F2}%");
+                }
+                else
+                {
+                    if (string.IsNullOrEmpty(result.ImageHash))
+                        Log.Warning($"[UpdateFieldWithAIResult] ImageHash is empty, cannot cache AI result");
+                    if (ocrProcessor == null)
+                        Log.Warning($"[UpdateFieldWithAIResult] OCRProcessor is null, cannot cache AI result");
+                }
+
+                // Update the Scan tab textbox
+                // Note: fieldTextBoxes uses just the field name as key, not category_field
+                if (fieldTextBoxes.TryGetValue(result.FieldName, out var textBox))
+                {
+                    // Update the textbox with the AI result
+                    textBox.Text = result.Text;
+
+                    // Optionally add a visual indicator that this was AI-enhanced
+                    textBox.Background = new SolidColorBrush(Color.FromArgb(30, 46, 204, 113)); // Light green tint
+
+                    // Store the value to prevent Scanner from overwriting it
+                    lastFieldValues[result.FieldName] = result.Text;
+
+                    Log.Information($"[UpdateFieldWithAIResult] Updated Scan tab field '{result.FieldName}' with AI result: '{result.Text}'");
+                }
+                else
+                {
+                    Log.Warning($"[UpdateFieldWithAIResult] Could not find textbox for field '{result.FieldName}'");
+                }
+
+                // Update the underlying DataRecord in DataManager
+                if (GameProfileManager?.ActiveProfile != null && dataManager != null && currentRecordHash != null)
+                {
+                    if (dataManager.DataRecordDictionary.TryGetValue(currentRecordHash, out var existingRecord))
+                    {
+                        // Verify this record matches the category
+                        if (existingRecord.Category == result.CategoryName)
+                        {
+                            Log.Debug($"[UpdateFieldWithAIResult] Found existing record with hash '{currentRecordHash}', updating field '{result.FieldName}'");
+
+                            // Update the field value
+                            existingRecord.Fields[result.FieldName] = result.Text;
+                            existingRecord.ScanDate = DateTime.UtcNow; // Update scan date
+
+                            // Update the field confidence with the AI confidence
+                            if (existingRecord.FieldConfidences == null)
+                            {
+                                existingRecord.FieldConfidences = new Dictionary<string, float>();
+                            }
+                            existingRecord.FieldConfidences[result.FieldName] = result.Confidence;
+                            Log.Information($"[UpdateFieldWithAIResult] Updated FieldConfidence for '{result.FieldName}' to {result.Confidence:F2}");
+
+                            // Mark as unsaved
+                            dataManager.MarkAsUnsaved();
+
+                            // Force immediate save to persist AI confidence update
+                            if (GameProfileManager?.ActiveProfile != null)
+                            {
+                                dataManager.SaveDataRecords(GameProfileManager.ActiveProfile);
+                                Log.Information($"[UpdateFieldWithAIResult] Immediately saved DataRecords to persist AI confidence update for '{result.FieldName}'");
+                            }
+
+                            Log.Information($"[UpdateFieldWithAIResult] Updated DataRecord field '{result.FieldName}' to '{result.Text}'");
+
+                            // Update the Data tab's ObservableCollection
+                            if (categoryCollections.TryGetValue(result.CategoryName, out var collection))
+                            {
+                                var recordInCollection = collection.FirstOrDefault(r =>
+                                    dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == currentRecordHash);
+
+                                if (recordInCollection != null)
+                                {
+                                    // The record reference is the same, but we need to trigger UI refresh
+                                    var index = collection.IndexOf(recordInCollection);
+                                    if (index >= 0)
+                                    {
+                                        // Force refresh by removing and re-adding
+                                        collection.RemoveAt(index);
+                                        collection.Insert(index, recordInCollection);
+
+                                        Log.Information($"[UpdateFieldWithAIResult] Refreshed Data tab collection at index {index}");
+                                    }
+                                }
+                                else
+                                {
+                                    Log.Warning($"[UpdateFieldWithAIResult] Could not find record in collection for category '{result.CategoryName}'");
+                                }
+                            }
+                            else
+                            {
+                                Log.Warning($"[UpdateFieldWithAIResult] Could not find collection for category '{result.CategoryName}'");
+                            }
+
+                            // Update unsaved indicator
+                            UpdateUnsavedIndicator();
+                        }
+                        else
+                        {
+                            Log.Warning($"[UpdateFieldWithAIResult] Record category mismatch: expected '{result.CategoryName}', got '{existingRecord.Category}'");
+                        }
+                    }
+                    else
+                    {
+                        Log.Warning($"[UpdateFieldWithAIResult] Could not find record with hash '{currentRecordHash}' in DataRecordDictionary");
+                    }
+                }
+                else
+                {
+                    if (GameProfileManager?.ActiveProfile == null)
+                        Log.Warning($"[UpdateFieldWithAIResult] No active profile");
+                    if (dataManager == null)
+                        Log.Warning($"[UpdateFieldWithAIResult] DataManager is null");
+                    if (currentRecordHash == null)
+                        Log.Warning($"[UpdateFieldWithAIResult] currentRecordHash is null - cannot update DataRecord");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, $"Failed to update field with AI result: {result.CategoryName}/{result.FieldName}");
+            }
+        }
+
         // OnClosed is already implemented in the class
     }
 }

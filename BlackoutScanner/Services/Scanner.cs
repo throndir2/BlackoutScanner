@@ -16,6 +16,8 @@ namespace BlackoutScanner.Services
         private readonly IDataManager dataManager;
         private readonly IOCRProcessor ocrProcessor;
         private readonly IScreenCapture screenCapture;
+        private readonly IAIQueueProcessor? aiQueueProcessor;
+        private readonly ISettingsManager? settingsManager;
         private GameProfile? activeProfile;
 
         // Debug settings
@@ -34,11 +36,13 @@ namespace BlackoutScanner.Services
         public event Action<DateTime>? ScanDateUpdated;
         public event Action<string>? CategoryScanning; // Add this new event
 
-        public Scanner(IDataManager dataManager, IOCRProcessor ocrProcessor, IScreenCapture screenCapture)
+        public Scanner(IDataManager dataManager, IOCRProcessor ocrProcessor, IScreenCapture screenCapture, IAIQueueProcessor? aiQueueProcessor = null, ISettingsManager? settingsManager = null)
         {
             this.dataManager = dataManager;
             this.ocrProcessor = ocrProcessor;
             this.screenCapture = screenCapture;
+            this.aiQueueProcessor = aiQueueProcessor;
+            this.settingsManager = settingsManager;
 
             // Default debug settings
             this.saveDebugImages = false;
@@ -50,6 +54,25 @@ namespace BlackoutScanner.Services
                            $"saveDebugImages={this.saveDebugImages}, " +
                            $"verboseLogging={this.verboseLogging}, " +
                            $"debugImagesFolder={this.debugImagesFolder}");
+
+            // Log AI Queue Processor availability
+            if (this.aiQueueProcessor != null)
+            {
+                Log.Information("[Scanner.Constructor] AIQueueProcessor is AVAILABLE and will be used for low-confidence results");
+            }
+            else
+            {
+                Log.Warning("[Scanner.Constructor] AIQueueProcessor is NULL - low-confidence results will NOT be queued for AI enhancement");
+            }
+
+            if (this.settingsManager != null)
+            {
+                Log.Information("[Scanner.Constructor] SettingsManager is AVAILABLE");
+            }
+            else
+            {
+                Log.Warning("[Scanner.Constructor] SettingsManager is NULL - cannot check AI enhancement settings");
+            }
         }
 
         public void UpdateDebugSettings(bool saveDebugImages, bool verboseLogging, string debugImagesFolder)
@@ -106,8 +129,6 @@ namespace BlackoutScanner.Services
             Rectangle gameWindowRect = screenCapture.GetClientRectangle(activeProfile.GameWindowTitle);
             if (gameWindowRect == Rectangle.Empty) return;
 
-            Log.Debug($"Scanner: Using gameWindowRect {gameWindowRect} for scanning");
-
             // Create a container rectangle for coordinate conversion
             var containerRect = new Rectangle(0, 0, gameWindowRect.Width, gameWindowRect.Height);
 
@@ -117,8 +138,6 @@ namespace BlackoutScanner.Services
                 {
                     // Convert relative bounds to absolute for this window size
                     var categoryAbsoluteBounds = category.RelativeBounds.ToAbsolute(containerRect);
-
-                    Log.Debug($"Scanner: Category '{category.Name}' relative bounds {category.RelativeBounds} converted to absolute {categoryAbsoluteBounds}");
 
                     // First check if category area has changed to avoid unnecessary processing
                     string categoryHash;
@@ -138,7 +157,6 @@ namespace BlackoutScanner.Services
 
                         // Store the new hash for next comparison
                         previousCategoryHashes[category.Name] = categoryHash;
-                        Log.Debug($"Scanner: Category '{category.Name}' changed (new hash), proceeding with processing");
                     }
 
                     // Check if this category matches based on its comparison mode
@@ -161,9 +179,7 @@ namespace BlackoutScanner.Services
                                 using (var ms = new System.IO.MemoryStream(category.PreviewImageData))
                                 using (var referenceImage = new Bitmap(ms))
                                 {
-                                    Log.Debug($"Scanner: Comparing category '{category.Name}' image with threshold {0.90:P2}");
                                     isCategoryMatch = CompareImages(categoryAreaBitmap, referenceImage);
-                                    Log.Debug($"Scanner: Category '{category.Name}' image match result: {isCategoryMatch}");
                                 }
                             }
                         }
@@ -393,6 +409,70 @@ namespace BlackoutScanner.Services
 
                 Log.Debug($"Field '{field.Name}' OCR result: '{fieldResult.Text}' (Confidence: {avgConfidence:F2}, IsKeyField: {field.IsKeyField})");
 
+                // Check if we should enqueue for AI enhancement
+                if (settingsManager != null && aiQueueProcessor != null)
+                {
+                    bool useAIEnhancement = settingsManager.Settings.UseAIEnhancedOCR;
+                    float confidenceThreshold = settingsManager.Settings.OCRConfidenceThreshold;
+
+                    Log.Debug($"[Scanner] AI Enhancement enabled: {useAIEnhancement}, Confidence threshold: {confidenceThreshold}, Current confidence: {avgConfidence:F2}");
+
+                    if (useAIEnhancement && avgConfidence < confidenceThreshold)
+                    {
+                        Log.Information($"[Scanner] ENQUEUING low-confidence OCR result for AI enhancement: Category='{category.Name}', Field='{field.Name}', Text='{fieldResult.Text}', Confidence={avgConfidence:F2}, TesseractTime={fieldResult.ProcessingTimeMs}ms");
+
+                        try
+                        {
+                            // Capture the field image as byte array
+                            using (var fieldBitmap = gameWindowBitmap.Clone(fieldAbsoluteBounds, gameWindowBitmap.PixelFormat))
+                            using (var ms = new System.IO.MemoryStream())
+                            {
+                                fieldBitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                                var imageData = ms.ToArray();
+
+                                // Generate image hash for cache lookup
+                                var bitmapImage = ocrProcessor.ConvertBitmapToBitmapImage(fieldBitmap);
+                                var imageHash = ocrProcessor.GenerateImageHash(bitmapImage);
+
+                                var queueItem = new AIOCRQueueItem
+                                {
+                                    ImageData = imageData,
+                                    OriginalResult = fieldResult,
+                                    CategoryName = category.Name,
+                                    FieldName = field.Name,
+                                    ImageHash = imageHash,
+                                    AIProvider = settingsManager.Settings.AIProvider,
+                                    QueuedAt = DateTime.UtcNow
+                                };
+
+                                Log.Debug($"[Scanner] Queue item created with OriginalResult.ProcessingTimeMs={queueItem.OriginalResult.ProcessingTimeMs}ms, ImageHash={imageHash}");
+
+                                aiQueueProcessor.Enqueue(queueItem);
+                                Log.Information($"[Scanner] Successfully enqueued item to AI queue. Current queue size: {aiQueueProcessor.QueueCount}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error(ex, $"[Scanner] Failed to enqueue item to AI queue for field '{field.Name}'");
+                        }
+                    }
+                    else if (!useAIEnhancement)
+                    {
+                        Log.Debug($"[Scanner] AI Enhancement is disabled, skipping queue for '{field.Name}'");
+                    }
+                    else
+                    {
+                        Log.Debug($"[Scanner] Confidence {avgConfidence:F2} >= threshold {confidenceThreshold}, skipping AI queue for '{field.Name}'");
+                    }
+                }
+                else
+                {
+                    if (settingsManager == null)
+                        Log.Debug($"[Scanner] SettingsManager is null, cannot check AI enhancement settings");
+                    if (aiQueueProcessor == null)
+                        Log.Debug($"[Scanner] AIQueueProcessor is null, cannot enqueue items");
+                }
+
                 using (var fieldBitmap = gameWindowBitmap.Clone(fieldAbsoluteBounds, gameWindowBitmap.PixelFormat))
                 {
                     ImageUpdated?.Invoke(field.Name, ocrProcessor.ConvertBitmapToBitmapImage(fieldBitmap));
@@ -453,18 +533,10 @@ namespace BlackoutScanner.Services
 
                 using (var croppedBitmap = gameWindowBitmap.Clone(area, gameWindowBitmap.PixelFormat))
                 {
-                    // Use the extended method with debug parameters
-                    Log.Debug($"[Scanner.ProcessArea] Calling ProcessImageWithFallback with saveDebugImages={saveDebugImages}");
+                    // Call ProcessImage to ensure timing is captured
+                    Log.Debug($"[Scanner.ProcessArea] Calling ProcessImage for category='{category}', field='{fieldName}'");
 
-                    return ocrProcessor.ProcessImageWithFallback(
-                        croppedBitmap,
-                        0,
-                        numericalOnly,
-                        saveDebugImages,
-                        debugImagesFolder,
-                        verboseLogging,
-                        category,
-                        fieldName);
+                    return ocrProcessor.ProcessImage(croppedBitmap, category, fieldName);
                 }
             }
             catch (Exception ex)
@@ -478,8 +550,6 @@ namespace BlackoutScanner.Services
         {
             try
             {
-                Log.Debug($"Original image dimensions - Current: {image1.Width}x{image1.Height}, Reference: {image2.Width}x{image2.Height}");
-
                 // Resize images if they don't match dimensions
                 if (image1.Width != image2.Width || image1.Height != image2.Height)
                 {
@@ -503,9 +573,6 @@ namespace BlackoutScanner.Services
         {
             int matchingPixels = 0;
             int totalPixels = image1.Width * image1.Height;
-
-            // Log dimensions to help diagnose scaling issues
-            Log.Debug($"Comparing images - Image1: {image1.Width}x{image1.Height}, Image2: {image2.Width}x{image2.Height}");
 
             for (int x = 0; x < image1.Width; x++)
             {
