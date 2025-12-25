@@ -45,7 +45,7 @@ namespace BlackoutScanner.Repositories
             try
             {
                 // Ensure directory exists
-                string directory = Path.GetDirectoryName(fileName);
+                string? directory = Path.GetDirectoryName(fileName);
                 if (!string.IsNullOrEmpty(directory) && !_fileSystem.DirectoryExists(directory))
                 {
                     _fileSystem.CreateDirectory(directory);
@@ -67,7 +67,7 @@ namespace BlackoutScanner.Repositories
             try
             {
                 // Ensure directory exists
-                string directory = Path.GetDirectoryName(fileName);
+                string? directory = Path.GetDirectoryName(fileName);
                 if (!string.IsNullOrEmpty(directory) && !_fileSystem.DirectoryExists(directory))
                 {
                     _fileSystem.CreateDirectory(directory);

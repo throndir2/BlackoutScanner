@@ -4,6 +4,8 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
@@ -509,7 +511,7 @@ namespace BlackoutScanner.Services
 
             // NOW enqueue low-confidence fields for AI enhancement WITH the record hash
             // This ensures we know which specific record these fields belong to
-            if (aiEnhancementQueue.Any())
+            if (aiEnhancementQueue.Any() && aiQueueProcessor != null)
             {
                 // Generate the hash for this specific record
                 var recordHash = dataManager.GenerateDataHash(dataRecord, activeProfile);
@@ -543,7 +545,7 @@ namespace BlackoutScanner.Services
                                 QueuedAt = DateTime.UtcNow
                             };
 
-                            Log.Debug($"[Scanner] Queue item created with OriginalResult.ProcessingTimeMs={queueItem.OriginalResult.ProcessingTimeMs}ms, ImageHash={imageHash}, RecordHash={recordHash}");
+                            Log.Debug($"[Scanner] Queue item created with OriginalResult.ProcessingTimeMs={queueItem.OriginalResult?.ProcessingTimeMs ?? 0}ms, ImageHash={imageHash}, RecordHash={recordHash}");
 
                             aiQueueProcessor.Enqueue(queueItem);
                             Log.Information($"[Scanner] Successfully enqueued item to AI queue. Current queue size: {aiQueueProcessor.QueueCount}");
@@ -606,22 +608,70 @@ namespace BlackoutScanner.Services
         {
             int matchingPixels = 0;
             int totalPixels = image1.Width * image1.Height;
+            int requiredMatches = (int)(totalPixels * threshold);
 
-            for (int x = 0; x < image1.Width; x++)
+            // Lock bits for direct memory access - much faster than GetPixel
+            var rect = new Rectangle(0, 0, image1.Width, image1.Height);
+            BitmapData? data1 = null;
+            BitmapData? data2 = null;
+
+            try
             {
+                data1 = image1.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+                data2 = image2.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+
+                int bytesPerPixel = 4; // 32bpp ARGB
+                int stride1 = data1.Stride;
+                int stride2 = data2.Stride;
+                int byteCount = stride1 * image1.Height;
+
+                byte[] pixels1 = new byte[byteCount];
+                byte[] pixels2 = new byte[byteCount];
+
+                Marshal.Copy(data1.Scan0, pixels1, 0, byteCount);
+                Marshal.Copy(data2.Scan0, pixels2, 0, byteCount);
+
                 for (int y = 0; y < image1.Height; y++)
                 {
-                    var pixel1 = image1.GetPixel(x, y);
-                    var pixel2 = image2.GetPixel(x, y);
-
-                    // Simple RGB comparison with tolerance
-                    if (Math.Abs(pixel1.R - pixel2.R) < 10 &&
-                        Math.Abs(pixel1.G - pixel2.G) < 10 &&
-                        Math.Abs(pixel1.B - pixel2.B) < 10)
+                    int rowOffset = y * stride1;
+                    for (int x = 0; x < image1.Width; x++)
                     {
-                        matchingPixels++;
+                        int pixelOffset = rowOffset + (x * bytesPerPixel);
+
+                        // BGRA format: B=0, G=1, R=2, A=3
+                        byte b1 = pixels1[pixelOffset];
+                        byte g1 = pixels1[pixelOffset + 1];
+                        byte r1 = pixels1[pixelOffset + 2];
+
+                        byte b2 = pixels2[pixelOffset];
+                        byte g2 = pixels2[pixelOffset + 1];
+                        byte r2 = pixels2[pixelOffset + 2];
+
+                        // Simple RGB comparison with tolerance
+                        if (Math.Abs(r1 - r2) < 10 &&
+                            Math.Abs(g1 - g2) < 10 &&
+                            Math.Abs(b1 - b2) < 10)
+                        {
+                            matchingPixels++;
+                        }
+                    }
+
+                    // Early exit optimization: if we can't possibly reach threshold, stop
+                    int pixelsChecked = (y + 1) * image1.Width;
+                    int remainingPixels = totalPixels - pixelsChecked;
+                    if (matchingPixels + remainingPixels < requiredMatches)
+                    {
+                        Log.Debug($"Image comparison early exit: cannot reach threshold ({matchingPixels}/{requiredMatches} with {remainingPixels} remaining)");
+                        return false;
                     }
                 }
+            }
+            finally
+            {
+                if (data1 != null)
+                    image1.UnlockBits(data1);
+                if (data2 != null)
+                    image2.UnlockBits(data2);
             }
 
             double similarity = (double)matchingPixels / totalPixels;

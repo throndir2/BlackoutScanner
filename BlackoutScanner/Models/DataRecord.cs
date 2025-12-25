@@ -16,6 +16,13 @@ namespace BlackoutScanner.Models
         public int? EntityIndex { get; set; }
         public Guid? GroupId { get; set; } // Groups multiple entities from same scan
 
+        /// <summary>
+        /// Cached hash for fast lookups. This should be set when the record is added to a collection
+        /// and updated when key fields change. Not persisted to storage.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public string? CachedHash { get; set; }
+
         public string ToDisplayString()
         {
             var sb = new StringBuilder();

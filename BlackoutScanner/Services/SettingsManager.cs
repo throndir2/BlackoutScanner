@@ -214,13 +214,13 @@ namespace BlackoutScanner.Services
                         var nvidiaProvider = new AIProviderConfiguration
                         {
                             Id = Guid.NewGuid(),
-                            ProviderType = "NvidiaBuild",
-                            DisplayName = "NVIDIA Build API (Migrated)",
+                            ProviderType = "Nvidia",
+                            DisplayName = "NVIDIA (Migrated)",
                             Model = model,
                             ApiKey = _settings.NvidiaApiKey,
                             Priority = 1,
                             IsEnabled = true,
-                            RequestsPerMinute = BlackoutScanner.Utilities.AIProviderDefaults.GetDefaultRequestsPerMinute("NvidiaBuild", model)
+                            RequestsPerMinute = BlackoutScanner.Utilities.AIProviderDefaults.GetDefaultRequestsPerMinute("Nvidia", model)
                         };
                         _settings.AIProviders.Add(nvidiaProvider);
                         Log.Information($"[SettingsManager] Migrated NVIDIA provider: Model={nvidiaProvider.Model}, RPM={nvidiaProvider.RequestsPerMinute}");
@@ -252,7 +252,7 @@ namespace BlackoutScanner.Services
                             Id = Guid.NewGuid(),
                             ProviderType = "Gemini",
                             DisplayName = "Gemini Flash (Migrated)",
-                            Model = "gemini-2.5-flash",
+                            Model = "gemini-3-flash",
                             ApiKey = _settings.GeminiApiKey,
                             Priority = 3,
                             IsEnabled = true,
@@ -278,10 +278,40 @@ namespace BlackoutScanner.Services
                 {
                     Log.Debug("[SettingsManager] No AI provider settings to migrate");
                 }
+
+                // Normalize NVIDIA provider types (migrate NvidiaBuild/NemotronParse to unified Nvidia)
+                NormalizeNvidiaProviderTypes();
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "[SettingsManager] Error during AI provider settings migration");
+            }
+        }
+
+        /// <summary>
+        /// Normalizes legacy NVIDIA provider types (NvidiaBuild, NemotronParse) to unified "Nvidia" type.
+        /// The model name determines which API is used internally.
+        /// </summary>
+        private void NormalizeNvidiaProviderTypes()
+        {
+            if (_settings.AIProviders == null || !_settings.AIProviders.Any())
+                return;
+
+            bool needsSave = false;
+            foreach (var provider in _settings.AIProviders)
+            {
+                if (provider.ProviderType == "NvidiaBuild" || provider.ProviderType == "NemotronParse")
+                {
+                    Log.Information($"[SettingsManager] Normalizing provider type '{provider.ProviderType}' to 'Nvidia' for '{provider.DisplayName}'");
+                    provider.ProviderType = "Nvidia";
+                    needsSave = true;
+                }
+            }
+
+            if (needsSave)
+            {
+                SaveSettings();
+                Log.Information("[SettingsManager] NVIDIA provider type normalization complete");
             }
         }
 

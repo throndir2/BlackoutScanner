@@ -886,21 +886,32 @@ namespace BlackoutScanner.Views
                     .OrderByDescending(r => r.ScanDate)
                     .ToList();
 
-                // Use batch update to minimize UI updates
+                // Batch update: Temporarily disconnect from UI to prevent multiple refreshes
+                dataGrid.ItemsSource = null;
+                
                 collection.Clear();
-
                 foreach (var record in tempList)
                 {
+                    // Cache the hash for fast lookups later
+                    if (string.IsNullOrEmpty(record.CachedHash) && GameProfileManager?.ActiveProfile != null)
+                    {
+                        record.CachedHash = dataManager.GenerateDataHash(record, GameProfileManager.ActiveProfile);
+                    }
                     collection.Add(record);
                 }
+                
+                // Reconnect to UI once
+                dataGrid.ItemsSource = collection;
 
                 Log.Debug($"Reloaded {tempList.Count} records for category {categoryName}");
             }
-
-            // Set the ItemsSource to our ObservableCollection - only needed on first load
-            if (dataGrid.ItemsSource != collection)
+            else
             {
-                dataGrid.ItemsSource = collection;
+                // Set the ItemsSource to our ObservableCollection - only needed on first load
+                if (dataGrid.ItemsSource != collection)
+                {
+                    dataGrid.ItemsSource = collection;
+                }
             }
 
             // Schedule column auto-sizing with throttling - but only if needed
@@ -945,8 +956,24 @@ namespace BlackoutScanner.Views
             }
         }
 
+        // Track when columns were last auto-sized to avoid excessive resizing
+        private Dictionary<DataGrid, DateTime> lastAutoSizeTime = new Dictionary<DataGrid, DateTime>();
+        private const int AutoSizeMinIntervalMs = 2000; // Minimum 2 seconds between auto-sizes per grid
+
         private void AutoSizeDataGridColumns(DataGrid dataGrid)
         {
+            // Check if we've recently auto-sized this grid
+            if (lastAutoSizeTime.TryGetValue(dataGrid, out var lastTime))
+            {
+                if ((DateTime.UtcNow - lastTime).TotalMilliseconds < AutoSizeMinIntervalMs)
+                {
+                    Log.Debug($"Skipping auto-size for grid - too soon since last resize");
+                    return;
+                }
+            }
+            
+            lastAutoSizeTime[dataGrid] = DateTime.UtcNow;
+            
             // Only process visible rows to improve performance
             const int maxRowsToProcess = 50; // Limit the number of rows to process
             var itemsSource = dataGrid.ItemsSource;
@@ -1416,16 +1443,42 @@ namespace BlackoutScanner.Views
 
             if (categoryCollections.TryGetValue(categoryName, out var collection))
             {
-                // Find existing record in the collection
-                var existingRecord = collection.FirstOrDefault(r =>
-                    dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == hash);
-
-                if (existingRecord != null)
+                // Find existing record in the collection using cached hash for O(n) comparison instead of O(n²) hash regeneration
+                int existingIndex = -1;
+                DataRecord? existingRecord = null;
+                
+                for (int i = 0; i < collection.Count; i++)
                 {
+                    // Use cached hash if available, otherwise generate and cache it
+                    var recordHash = collection[i].CachedHash;
+                    if (string.IsNullOrEmpty(recordHash))
+                    {
+                        recordHash = dataManager.GenerateDataHash(collection[i], GameProfileManager.ActiveProfile);
+                        collection[i].CachedHash = recordHash;
+                    }
+                    
+                    if (recordHash == hash)
+                    {
+                        existingIndex = i;
+                        existingRecord = collection[i];
+                        break;
+                    }
+                }
+
+                if (existingRecord != null && existingIndex >= 0)
+                {
+                    // Track if any data actually changed
+                    bool dataChanged = false;
+                    
                     // Update existing record - copy all fields
                     foreach (var field in record.Fields)
                     {
-                        existingRecord.Fields[field.Key] = field.Value;
+                        if (!existingRecord.Fields.TryGetValue(field.Key, out var existingValue) ||
+                            !Equals(existingValue, field.Value))
+                        {
+                            existingRecord.Fields[field.Key] = field.Value;
+                            dataChanged = true;
+                        }
                     }
 
                     // Copy field confidences
@@ -1434,23 +1487,36 @@ namespace BlackoutScanner.Views
                         if (existingRecord.FieldConfidences == null)
                         {
                             existingRecord.FieldConfidences = new Dictionary<string, float>();
+                            dataChanged = true;
                         }
                         foreach (var confidence in record.FieldConfidences)
                         {
-                            existingRecord.FieldConfidences[confidence.Key] = confidence.Value;
+                            if (!existingRecord.FieldConfidences.TryGetValue(confidence.Key, out var existingConf) ||
+                                Math.Abs(existingConf - confidence.Value) > 0.001f)
+                            {
+                                existingRecord.FieldConfidences[confidence.Key] = confidence.Value;
+                                dataChanged = true;
+                            }
                         }
                     }
 
-                    existingRecord.ScanDate = record.ScanDate;
+                    if (existingRecord.ScanDate != record.ScanDate)
+                    {
+                        existingRecord.ScanDate = record.ScanDate;
+                        dataChanged = true;
+                    }
 
-                    // Force UI refresh by removing and re-adding
-                    var index = collection.IndexOf(existingRecord);
-                    collection.RemoveAt(index);
-                    collection.Insert(index, existingRecord);
+                    // Only trigger UI refresh if data actually changed
+                    if (dataChanged)
+                    {
+                        // Use simple in-place replacement to trigger UI update
+                        collection[existingIndex] = existingRecord;
+                    }
                 }
                 else
                 {
                     // Add new record to the collection
+                    record.CachedHash = hash; // Cache the hash for future lookups
                     collection.Insert(0, record);
                 }
 
@@ -1768,9 +1834,10 @@ namespace BlackoutScanner.Views
                                         {
                                             Log.Debug($"[SaveField_Click] Found collection for category '{category.Name}' with {collection.Count} items");
 
-                                            // Find and remove the old record from the collection
+                                            // Find and remove the old record from the collection using cached hash
                                             var oldRecord = collection.FirstOrDefault(r =>
-                                                dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == oldHash);
+                                                r.CachedHash == oldHash || 
+                                                (string.IsNullOrEmpty(r.CachedHash) && dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == oldHash));
 
                                             if (oldRecord != null)
                                             {
@@ -1794,6 +1861,7 @@ namespace BlackoutScanner.Views
 
                                         // Update currentRecordHash to the new hash
                                         string newHash = dataManager.GenerateDataHash(updatedRecord, GameProfileManager.ActiveProfile);
+                                        updatedRecord.CachedHash = newHash; // Cache the hash for future lookups
                                         Log.Debug($"[SaveField_Click] New hash generated: '{newHash}'");
 
                                         currentRecordHash = newHash;
@@ -1813,9 +1881,10 @@ namespace BlackoutScanner.Views
                                         {
                                             Log.Debug($"[SaveField_Click] Found collection for category '{category.Name}' with {collection.Count} items");
 
-                                            // Find the record in the collection
+                                            // Find the record in the collection using cached hash
                                             var recordInCollection = collection.FirstOrDefault(r =>
-                                                dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == currentRecordHash);
+                                                r.CachedHash == currentRecordHash ||
+                                                (string.IsNullOrEmpty(r.CachedHash) && dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == currentRecordHash));
 
                                             if (recordInCollection != null)
                                             {
@@ -3007,7 +3076,7 @@ namespace BlackoutScanner.Views
                         Log.Information($"[LanguageCheckBox_Changed] BEFORE assignment - SettingsManager.Settings.SelectedLanguages count: {SettingsManager.Settings.SelectedLanguages?.Count ?? 0}");
                         Log.Information($"[LanguageCheckBox_Changed] Assigning new list with count: {selectedLanguages.Count}, Languages: [{string.Join(", ", selectedLanguages)}]");
                         SettingsManager.Settings.SelectedLanguages = selectedLanguages;
-                        Log.Information($"[LanguageCheckBox_Changed] AFTER assignment - SettingsManager.Settings.SelectedLanguages count: {SettingsManager.Settings.SelectedLanguages?.Count ?? 0}, Languages: [{string.Join(", ", SettingsManager.Settings.SelectedLanguages)}]");
+                        Log.Information($"[LanguageCheckBox_Changed] AFTER assignment - SettingsManager.Settings.SelectedLanguages count: {SettingsManager.Settings.SelectedLanguages?.Count ?? 0}, Languages: [{string.Join(", ", SettingsManager.Settings.SelectedLanguages ?? new List<string>())}]");
                         SettingsManager.SaveSettings();
 
                         // Update OCR processor in background
@@ -3038,7 +3107,8 @@ namespace BlackoutScanner.Views
             }
         }
 
-        // AI Enhancement Settings Methods
+        // AI Enhancement Settings Methods (Legacy UI - uses deprecated properties for backward compatibility)
+#pragma warning disable CS0618 // Type or member is obsolete
         private void AISettings_Changed(object sender, RoutedEventArgs e)
         {
             if (sender is CheckBox checkBox && SettingsManager != null)
@@ -3239,6 +3309,7 @@ namespace BlackoutScanner.Views
                 }
             });
         }
+#pragma warning restore CS0618 // Type or member is obsolete
 
         // AI Provider Management Methods
         private void AddAIProvider_Click(object sender, RoutedEventArgs e)
@@ -3354,6 +3425,7 @@ namespace BlackoutScanner.Views
             }
         }
 
+#pragma warning disable CS0618 // Type or member is obsolete
         private void InitializeAISettings()
         {
             Dispatcher.Invoke(() =>
@@ -3379,6 +3451,7 @@ namespace BlackoutScanner.Views
                 }
             });
         }
+#pragma warning restore CS0618 // Type or member is obsolete
 
         // Handle the local time in exports checkbox
         private void UseLocalTimeCheckBox_Changed(object sender, RoutedEventArgs e)
@@ -3577,8 +3650,10 @@ namespace BlackoutScanner.Views
                             // Update the Data tab's ObservableCollection
                             if (categoryCollections.TryGetValue(result.CategoryName, out var collection))
                             {
+                                // Use cached hash for fast lookup instead of regenerating
                                 var recordInCollection = collection.FirstOrDefault(r =>
-                                    dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == result.RecordHash);
+                                    r.CachedHash == result.RecordHash ||
+                                    (string.IsNullOrEmpty(r.CachedHash) && GameProfileManager?.ActiveProfile != null && dataManager.GenerateDataHash(r, GameProfileManager.ActiveProfile) == result.RecordHash));
 
                                 if (recordInCollection != null)
                                 {

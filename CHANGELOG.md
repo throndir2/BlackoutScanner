@@ -1,6 +1,26 @@
 ```markdown
 # Blackout Scanner Changelog
 
+## [2.1.2] - 2025-12-25
+
+### Added
+- **Groq Provider Support**: New AI provider integration with GroqCloud
+  - Support for Llama 4 vision models: `llama-4-maverick-17b-128e-instruct` and `llama-4-scout-17b-16e-instruct`
+  - Rate limit header logging for monitoring API usage
+- **Gemini 3 Flash Support**: Added support for `gemini-3-flash` and other preview models via v1alpha endpoint
+- **NVIDIA Nemotron-Parse Support**: Added support for `nvidia/nemotron-parse` model for document OCR
+
+### Improved
+- **Performance Optimizations**:
+  - Cached hash lookups on DataRecord objects to avoid repeated SHA256 calculations during collection searches
+  - Replaced slow `GetPixel()` calls with `LockBits` direct memory access for ~10x faster image comparison
+  - Added early-exit optimization in pixel comparison when threshold cannot be reached
+  - Upper cap limits on memory usage for OCR cache, hash cache, and image data cache
+
+### Fixed
+- AI Provider Editor dialog now preserves custom display names and rate limits when editing existing providers
+- Groq connection test now uses 2x2 pixel image (API requires minimum 2 pixels per dimension)
+
 ## [2.1.1] - 2025-10-03
 
 ### Added

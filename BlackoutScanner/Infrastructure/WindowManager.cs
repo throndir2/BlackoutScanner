@@ -51,7 +51,7 @@ namespace BlackoutScanner.Infrastructure
 
         public IntPtr FindWindowByTitle(string title)
         {
-            return FindWindow(null, title);
+            return FindWindow(null!, title);
         }
 
         public bool SetForegroundWindow(IntPtr handle)

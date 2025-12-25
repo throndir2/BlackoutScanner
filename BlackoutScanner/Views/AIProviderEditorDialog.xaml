@@ -37,10 +37,12 @@
                 <ComboBox x:Name="providerTypeComboBox"
                           SelectionChanged="ProviderType_SelectionChanged"
                           Margin="0,0,0,15">
-                    <ComboBoxItem Content="NVIDIA Build"
-                                  Tag="NvidiaBuild"/>
+                    <ComboBoxItem Content="NVIDIA"
+                                  Tag="Nvidia"/>
                     <ComboBoxItem Content="Google Gemini"
                                   Tag="Gemini"/>
+                    <ComboBoxItem Content="Groq (Llama 4)"
+                                  Tag="Groq"/>
                     <ComboBoxItem Content="OpenAI"
                                   Tag="OpenAI"/>
                     <ComboBoxItem Content="Custom Endpoint"

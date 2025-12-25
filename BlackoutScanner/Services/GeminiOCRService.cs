@@ -19,8 +19,17 @@ namespace BlackoutScanner.Services
         private string _apiKey;
         private string _model;
 
-        // Base URL for Gemini API
-        private const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta/models";
+        // Base URLs for Gemini API - different versions support different models
+        private const string BaseUrlBeta = "https://generativelanguage.googleapis.com/v1beta/models";
+        private const string BaseUrlAlpha = "https://generativelanguage.googleapis.com/v1alpha/models";
+        
+        // Models that require the v1alpha endpoint (preview/experimental models)
+        private static readonly string[] AlphaModels = new[]
+        {
+            "gemini-3",           // All gemini-3 variants
+            "gemini-2.5-pro",     // 2.5 pro preview
+            "gemini-exp",         // Experimental models
+        };
 
         // System prompt for OCR with special character handling
         private const string SystemPrompt = @"Extract all visible text from this image using OCR. 
@@ -39,7 +48,7 @@ Your task:
 3. Provide a confidence score (0-100) indicating how certain you are about the OCR accuracy
 4. Return ONLY the extracted text and confidence - no explanations or additional commentary
 
-Be precise with unusual Unicode characters - these are real usernames and exact accuracy matters.";
+Be precise with unusual Unicode characters - these are real usernames and exact accuracy matters. Your response should be a single line for the text as defined by the json schema.";
 
         public string ProviderName => "Gemini";
 
@@ -60,7 +69,7 @@ Be precise with unusual Unicode characters - these are real usernames and exact 
             _httpClient = new HttpClient();
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
             _apiKey = string.Empty;
-            _model = "gemini-2.5-flash";
+            _model = "gemini-3-flash";
         }
 
         public void UpdateConfiguration(string apiKey, string model)
@@ -205,9 +214,30 @@ Be precise with unusual Unicode characters - these are real usernames and exact 
             }
         }
 
+        /// <summary>
+        /// Determines the appropriate API endpoint based on the model name.
+        /// Newer/preview models use v1alpha, stable models use v1beta.
+        /// </summary>
+        private string GetApiBaseUrl()
+        {
+            // Check if the model requires the alpha endpoint
+            foreach (var alphaModel in AlphaModels)
+            {
+                if (_model.StartsWith(alphaModel, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log.Debug($"Model '{_model}' requires v1alpha endpoint");
+                    return BaseUrlAlpha;
+                }
+            }
+            
+            Log.Debug($"Model '{_model}' using v1beta endpoint");
+            return BaseUrlBeta;
+        }
+
         private async Task<GeminiResponse> SendRequestAsync(GeminiRequest request)
         {
-            var url = $"{BaseUrl}/{_model}:generateContent";
+            var baseUrl = GetApiBaseUrl();
+            var url = $"{baseUrl}/{_model}:generateContent";
 
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
 

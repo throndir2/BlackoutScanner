@@ -15,6 +15,9 @@ namespace BlackoutScanner.ViewModels
     /// </summary>
     public class AIQueueMonitorViewModel : INotifyPropertyChanged
     {
+        // Maximum items to keep in ProcessedItems to prevent memory bloat
+        private const int MaxProcessedItems = 100;
+        
         private int _pendingCount;
         private int _processedCount;
         private int _successCount;
@@ -139,6 +142,12 @@ namespace BlackoutScanner.ViewModels
 
                 // Add to processed (insert at beginning for most recent first)
                 ProcessedItems.Insert(0, result);
+                
+                // Trim old items to prevent memory bloat
+                while (ProcessedItems.Count > MaxProcessedItems)
+                {
+                    ProcessedItems.RemoveAt(ProcessedItems.Count - 1);
+                }
                 Log.Debug($"[AIQueueMonitorViewModel] Added to processed collection. Collection size: {ProcessedItems.Count}");
 
                 // Update counts

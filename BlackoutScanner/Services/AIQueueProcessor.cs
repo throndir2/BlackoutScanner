@@ -432,8 +432,13 @@ namespace BlackoutScanner.Services
             {
                 return providerConfig.ProviderType switch
                 {
+                    // Unified NVIDIA provider (handles all NVIDIA models)
+                    "Nvidia" => ServiceLocator.GetService<INvidiaOCRService>(),
+                    // Legacy NVIDIA provider types (backward compatibility) - route to unified service
                     "NvidiaBuild" => ServiceLocator.GetService<INvidiaOCRService>(),
-                    "Gemini" => new GeminiOCRService(), // Create new instance for Gemini
+                    "NemotronParse" => ServiceLocator.GetService<INvidiaOCRService>(),
+                    "Gemini" => new GeminiOCRService(),
+                    "Groq" => new GroqOCRService(),
                     // Future providers:
                     // "OpenAI" => ServiceLocator.GetService<IOpenAIService>(),
                     _ => null
@@ -450,6 +455,7 @@ namespace BlackoutScanner.Services
         {
             if (service is INvidiaOCRService nvidiaService)
             {
+                // Unified NVIDIA service handles all NVIDIA models (PaddleOCR, Nemotron-Parse, etc.)
                 nvidiaService.UpdateConfiguration(providerConfig.ApiKey, providerConfig.Model);
                 Log.Debug($"Configured NVIDIA service with model: {providerConfig.Model}");
             }
@@ -457,6 +463,11 @@ namespace BlackoutScanner.Services
             {
                 geminiService.UpdateConfiguration(providerConfig.ApiKey, providerConfig.Model);
                 Log.Debug($"Configured Gemini service with model: {providerConfig.Model}");
+            }
+            else if (service is GroqOCRService groqService)
+            {
+                groqService.UpdateConfiguration(providerConfig.ApiKey, providerConfig.Model);
+                Log.Debug($"Configured Groq service with model: {providerConfig.Model}");
             }
             // Future: Handle other providers
             // else if (service is IOpenAIService openAIService)

@@ -11,6 +11,9 @@ namespace BlackoutScanner
 {
     public class DataManager : IDataManager
     {
+        // Maximum hash cache entries to prevent unbounded memory growth
+        private const int MaxHashCacheSize = 5000;
+        
         private readonly IFileSystem _fileSystem;
         private readonly string jsonFilePath;
         private readonly string invalidJsonFilePath;
@@ -401,7 +404,17 @@ namespace BlackoutScanner
                     var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(cacheKey));
                     var hash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
 
-                    // Cache the result
+                    // Cache the result, but limit cache size to prevent unbounded growth
+                    if (_hashCache.Count >= MaxHashCacheSize)
+                    {
+                        // Remove oldest entries (approximately 20% of cache)
+                        var keysToRemove = _hashCache.Keys.Take(MaxHashCacheSize / 5).ToList();
+                        foreach (var key in keysToRemove)
+                        {
+                            _hashCache.TryRemove(key, out _);
+                        }
+                        Log.Debug($"Hash cache trimmed from {MaxHashCacheSize} to {_hashCache.Count} entries");
+                    }
                     _hashCache[cacheKey] = hash;
 
                     Log.Debug($"Generated hash: {hash} from: {cacheKey}");

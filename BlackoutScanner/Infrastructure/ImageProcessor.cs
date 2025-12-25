@@ -64,8 +64,8 @@ namespace BlackoutScanner.Infrastructure
         public void SaveBitmap(Bitmap bitmap, string filePath)
         {
             // Ensure directory exists
-            string directory = Path.GetDirectoryName(filePath);
-            if (!Directory.Exists(directory))
+            string? directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {
                 Directory.CreateDirectory(directory);
             }

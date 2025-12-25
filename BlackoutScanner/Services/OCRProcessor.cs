@@ -19,15 +19,19 @@ namespace BlackoutScanner.Services
 {
     public class OCRProcessor : IOCRProcessor
     {
+        // Maximum cache sizes to prevent unbounded memory growth
+        private const int MaxOCRCacheSize = 2000;
+        private const int MaxImageDataCacheSize = 500; // Image data is larger, so keep fewer
+        
         private Dictionary<string, TesseractEngine> tesseractEngines = new Dictionary<string, TesseractEngine>();
         private ConcurrentDictionary<string, object> engineLocks = new ConcurrentDictionary<string, object>();
         private Dictionary<string, OCRResult> ocrResultsCache = new Dictionary<string, OCRResult>();
         private Dictionary<string, string> imageDataCache = new Dictionary<string, string>();
+        private readonly object _cacheLock = new object(); // Lock for cache access
 
         // Single static lock for ALL Tesseract operations across the application
         private static readonly object _globalTesseractLock = new object();
         private static readonly SemaphoreSlim _initializationSemaphore = new SemaphoreSlim(1, 1);
-        private static bool _globalInitialized = false;
 
         private bool _isInitialized = false;
         private bool _isDisposed = false;
@@ -98,7 +102,6 @@ namespace BlackoutScanner.Services
                     Log.Information("EnsureInitialized: Beginning Tesseract engine initialization");
                     InitializeTesseractEnginesInternal(_currentLanguages, _tessdataDirectory);
                     _isInitialized = true;
-                    _globalInitialized = true;
                     Log.Information("EnsureInitialized: Tesseract engine initialization complete");
                 }
             }
@@ -118,14 +121,67 @@ namespace BlackoutScanner.Services
         {
             if (cacheData != null)
             {
-                ocrResultsCache = cacheData;
+                // Only load up to max size to prevent memory issues on startup
+                lock (_cacheLock)
+                {
+                    ocrResultsCache = cacheData.Count > MaxOCRCacheSize
+                        ? cacheData.TakeLast(MaxOCRCacheSize).ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+                        : cacheData;
+                    Log.Information($"Loaded OCR cache with {ocrResultsCache.Count} entries (max: {MaxOCRCacheSize})");
+                }
             }
         }
 
         // Exports the current state of the OCR results cache.
         public Dictionary<string, OCRResult> ExportCache()
         {
-            return ocrResultsCache;
+            lock (_cacheLock)
+            {
+                return new Dictionary<string, OCRResult>(ocrResultsCache);
+            }
+        }
+        
+        // Trims the OCR cache if it exceeds the maximum size
+        private void TrimOCRCacheIfNeeded()
+        {
+            lock (_cacheLock)
+            {
+                if (ocrResultsCache.Count >= MaxOCRCacheSize)
+                {
+                    // Remove oldest 20% of entries
+                    var keysToRemove = ocrResultsCache.Keys.Take(MaxOCRCacheSize / 5).ToList();
+                    foreach (var key in keysToRemove)
+                    {
+                        ocrResultsCache.Remove(key);
+                    }
+                    Log.Debug($"OCR cache trimmed to {ocrResultsCache.Count} entries");
+                }
+                
+                if (imageDataCache.Count >= MaxImageDataCacheSize)
+                {
+                    // Remove oldest 20% of entries
+                    var keysToRemove = imageDataCache.Keys.Take(MaxImageDataCacheSize / 5).ToList();
+                    foreach (var key in keysToRemove)
+                    {
+                        imageDataCache.Remove(key);
+                    }
+                    Log.Debug($"Image data cache trimmed to {imageDataCache.Count} entries");
+                }
+            }
+        }
+        
+        // Thread-safe cache addition
+        private void AddToCache(string imageHash, OCRResult result, string? imageBase64 = null)
+        {
+            lock (_cacheLock)
+            {
+                TrimOCRCacheIfNeeded();
+                ocrResultsCache[imageHash] = result;
+                if (imageBase64 != null)
+                {
+                    imageDataCache[imageHash] = imageBase64;
+                }
+            }
         }
 
         // Updates the OCR result for a given image hash with manually corrected text.
@@ -394,10 +450,7 @@ namespace BlackoutScanner.Services
 
                         var result = ProcessImageWithTesseract(bitmapCopy, engine);
                         result.ImageHash = imageHash;
-                        ocrResultsCache[imageHash] = result;
-
-                        // Add image data for UI display
-                        imageDataCache[imageHash] = ConvertBitmapImageToBase64(bitmapImage);
+                        AddToCache(imageHash, result, ConvertBitmapImageToBase64(bitmapImage));
 
                         if (saveDebugImages)
                         {
@@ -433,8 +486,7 @@ namespace BlackoutScanner.Services
 
                     if (allWordsMeetThreshold)
                     {
-                        ocrResultsCache[imageHash] = currentResult;
-                        imageDataCache[imageHash] = ConvertBitmapImageToBase64(bitmapImage);
+                        AddToCache(imageHash, currentResult, ConvertBitmapImageToBase64(bitmapImage));
 
                         Log.Information($"All words met confidence threshold. Language: {key}");
 
@@ -454,8 +506,7 @@ namespace BlackoutScanner.Services
                         {
                             Log.Information($"Text is a number.");
 
-                            ocrResultsCache[imageHash] = currentResult;
-                            imageDataCache[imageHash] = ConvertBitmapImageToBase64(bitmapImage);
+                            AddToCache(imageHash, currentResult, ConvertBitmapImageToBase64(bitmapImage));
 
                             bitmapCopy.Dispose();
                             return currentResult;
@@ -466,8 +517,7 @@ namespace BlackoutScanner.Services
                 // Cache best result
                 if (bestResult != null)
                 {
-                    ocrResultsCache[imageHash] = bestResult;
-                    imageDataCache[imageHash] = ConvertBitmapImageToBase64(bitmapImage);
+                    AddToCache(imageHash, bestResult, ConvertBitmapImageToBase64(bitmapImage));
                 }
 
                 bitmapCopy.Dispose();
