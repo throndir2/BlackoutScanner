@@ -41,6 +41,21 @@ namespace BlackoutScanner.Utilities
             { "meta-llama/llama-4-maverick-17b-128e-instruct", 30 },
             { "meta-llama/llama-4-scout-17b-16e-instruct", 30 },
             
+            // Mistral (Vision-capable models - 500K tokens/min free tier)
+            // Rate limit based on typical image token usage (~1000 tokens per request)
+            { "mistral", 30 },
+            { "mistral-small-latest", 30 },
+            { "mistral-large-latest", 30 },
+            { "mistral-medium-latest", 30 },
+            { "pixtral-12b-2409", 30 },
+            { "ministral-8b-latest", 30 },
+            { "ministral-3b-latest", 30 },
+            
+            // Cohere (Command A Vision - 20 req/min trial, 500 req/min production)
+            // Using trial tier limits as default - only vision model supported for OCR
+            { "cohere", 20 },
+            { "command-a-vision-07-2025", 20 },
+            
             // OpenAI (Conservative defaults for free tier)
             { "gpt-4o", 3 },
             { "gpt-4-turbo", 3 },
@@ -88,6 +103,8 @@ namespace BlackoutScanner.Utilities
                 "nemotronparse" => 40, // Legacy: maps to Nvidia
                 "gemini" => 15, // Default to Gemini 2.0 Flash / 1.5 Flash tier
                 "groq" => 30,   // Groq Llama 4 - generous free tier
+                "mistral" => 30, // Mistral vision models - generous free tier
+                "cohere" => 20,  // Cohere Command A Vision - trial tier
                 "openai" => 3,  // Conservative default for OpenAI
                 _ => 10         // Generic fallback
             };
@@ -128,6 +145,19 @@ namespace BlackoutScanner.Utilities
                 {
                     "meta-llama/llama-4-maverick-17b-128e-instruct",
                     "meta-llama/llama-4-scout-17b-16e-instruct"
+                },
+                "mistral" => new List<string>
+                {
+                    "mistral-large-latest",
+                    "pixtral-12b-2409",
+                    "mistral-small-latest",
+                    "mistral-medium-latest",
+                    "ministral-8b-latest",
+                    "ministral-3b-latest"
+                },
+                "cohere" => new List<string>
+                {
+                    "command-a-vision-07-2025"
                 },
                 "openai" => new List<string> { "gpt-4o", "gpt-4-turbo", "gpt-4-vision-preview" },
                 _ => new List<string>()

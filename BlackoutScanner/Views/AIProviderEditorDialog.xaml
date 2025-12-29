@@ -43,9 +43,13 @@
                                   Tag="Gemini"/>
                     <ComboBoxItem Content="Groq (Llama 4)"
                                   Tag="Groq"/>
+                    <ComboBoxItem Content="Mistral AI"
+                                  Tag="Mistral"/>
+                    <ComboBoxItem Content="Cohere"
+                                  Tag="Cohere"/>
                     <ComboBoxItem Content="OpenAI"
                                   Tag="OpenAI"/>
-                    <ComboBoxItem Content="Custom Endpoint"
+                    <ComboBoxItem Content="Custom (OpenAI Compatible)"
                                   Tag="Custom"/>
                 </ComboBox>
 

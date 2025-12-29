@@ -356,7 +356,8 @@ namespace BlackoutScanner.Services
 
                     result.SelectedAttemptIndex = result.Attempts.IndexOf(bestAttempt);
                     result.Success = true;
-                    result.Text = bestAttempt.Text;
+                    // Sanitize AI OCR text: replace newlines with spaces to ensure single-line output
+                    result.Text = SanitizeOCRText(bestAttempt.Text);
                     result.Confidence = bestAttempt.Confidence;
                     result.AIProvider = bestAttempt.ProviderType;
                     result.Model = bestAttempt.Model;
@@ -439,6 +440,8 @@ namespace BlackoutScanner.Services
                     "NemotronParse" => ServiceLocator.GetService<INvidiaOCRService>(),
                     "Gemini" => new GeminiOCRService(),
                     "Groq" => new GroqOCRService(),
+                    "Mistral" => new MistralOCRService(),
+                    "Cohere" => new CohereOCRService(),
                     // Future providers:
                     // "OpenAI" => ServiceLocator.GetService<IOpenAIService>(),
                     _ => null
@@ -468,6 +471,16 @@ namespace BlackoutScanner.Services
             {
                 groqService.UpdateConfiguration(providerConfig.ApiKey, providerConfig.Model);
                 Log.Debug($"Configured Groq service with model: {providerConfig.Model}");
+            }
+            else if (service is MistralOCRService mistralService)
+            {
+                mistralService.UpdateConfiguration(providerConfig.ApiKey, providerConfig.Model);
+                Log.Debug($"Configured Mistral service with model: {providerConfig.Model}");
+            }
+            else if (service is CohereOCRService cohereService)
+            {
+                cohereService.UpdateConfiguration(providerConfig.ApiKey, providerConfig.Model);
+                Log.Debug($"Configured Cohere service with model: {providerConfig.Model}");
             }
             // Future: Handle other providers
             // else if (service is IOpenAIService openAIService)
@@ -528,6 +541,27 @@ namespace BlackoutScanner.Services
             requestQueue.Enqueue(DateTime.UtcNow);
 
             Log.Debug($"[RateLimit] Recorded request for provider '{providerConfig.DisplayName}', total in window: {requestQueue.Count}");
+        }
+
+        /// <summary>
+        /// Sanitizes AI OCR text by replacing newlines with spaces and trimming excess whitespace.
+        /// This ensures OCR results are always single-line to prevent data entry issues.
+        /// </summary>
+        private static string SanitizeOCRText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            // Replace all types of newlines with a space
+            var sanitized = text
+                .Replace("\r\n", " ")
+                .Replace("\r", " ")
+                .Replace("\n", " ");
+
+            // Collapse multiple spaces into one and trim
+            sanitized = System.Text.RegularExpressions.Regex.Replace(sanitized, @"\s+", " ").Trim();
+
+            return sanitized;
         }
 
         public void Dispose()

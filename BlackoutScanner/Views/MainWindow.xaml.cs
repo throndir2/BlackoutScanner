@@ -3314,10 +3314,13 @@ namespace BlackoutScanner.Views
         // AI Provider Management Methods
         private void AddAIProvider_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new AIProviderEditorDialog();
+            // Pass the next available priority (count + 1) to the dialog
+            var nextPriority = (SettingsManager?.Settings.AIProviders.Count ?? 0) + 1;
+            var dialog = new AIProviderEditorDialog(null, nextPriority);
             if (dialog.ShowDialog() == true && dialog.Result != null)
             {
                 SettingsManager?.Settings.AIProviders.Add(dialog.Result);
+                ReorderAndNormalizeProviderPriorities();
                 SettingsManager?.SaveSettings();
                 Log.Information($"Added new AI provider: {dialog.Result.DisplayName}");
             }
@@ -3336,7 +3339,11 @@ namespace BlackoutScanner.Views
                     if (index >= 0 && SettingsManager != null)
                     {
                         SettingsManager.Settings.AIProviders[index] = dialog.Result;
+                        ReorderAndNormalizeProviderPriorities();
                         SettingsManager.SaveSettings();
+                        
+                        // Re-select the edited provider
+                        dataGrid.SelectedItem = dialog.Result;
                         Log.Information($"Updated AI provider: {dialog.Result.DisplayName}");
                     }
                 }
@@ -3357,10 +3364,36 @@ namespace BlackoutScanner.Views
                 if (result == MessageBoxResult.Yes)
                 {
                     SettingsManager?.Settings.AIProviders.Remove(selectedProvider);
+                    ReorderAndNormalizeProviderPriorities();
                     SettingsManager?.SaveSettings();
                     Log.Information($"Deleted AI provider: {selectedProvider.DisplayName}");
                 }
             }
+        }
+
+        /// <summary>
+        /// Reorders the AI providers list by their priority values and normalizes
+        /// priorities to sequential numbers (1, 2, 3, ...) to avoid duplicates.
+        /// </summary>
+        private void ReorderAndNormalizeProviderPriorities()
+        {
+            if (SettingsManager == null) return;
+
+            var providers = SettingsManager.Settings.AIProviders;
+            if (providers.Count == 0) return;
+
+            // Sort by priority, then by display name for stable ordering when priorities are equal
+            var sorted = providers.OrderBy(p => p.Priority).ThenBy(p => p.DisplayName).ToList();
+
+            // Clear and re-add in sorted order with normalized priorities
+            providers.Clear();
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                sorted[i].Priority = i + 1; // Normalize to 1, 2, 3, ...
+                providers.Add(sorted[i]);
+            }
+
+            Log.Debug($"Normalized AI provider priorities: {string.Join(", ", providers.Select(p => $"{p.DisplayName}={p.Priority}"))}");
         }
 
         private void MoveProviderUp_Click(object sender, RoutedEventArgs e)

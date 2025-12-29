@@ -1,6 +1,32 @@
 ```markdown
 # Blackout Scanner Changelog
 
+## [2.1.3] - 2025-12-28
+
+### Added
+- **Mistral AI Provider Support**: New AI provider integration with Mistral AI
+  - Support for vision-capable models: `pixtral-12b-2409`, `mistral-large-latest`, `mistral-medium-latest`, `ministral-8b-latest`, `ministral-3b-latest`
+  - Default model set to `mistral-large-latest` for best OCR accuracy
+  - OpenAI-compatible API format with JSON response handling
+
+- **Cohere Provider Support**: New AI provider integration with Cohere
+  - Support for vision model: `command-a-vision-07-2025` (vision-capable model for OCR)
+  - Default rate limit: 20 requests/minute (trial tier)
+  - 128K context window with 8K max output
+
+### Fixed
+- **AI OCR Newline Bug**: Fixed issue where AI OCR results could contain newlines in text fields (like Name), causing data entries to be misaligned. AI OCR results are now sanitized to ensure single-line output.
+- **NVIDIA Provider Model Dropdown**: Fixed NVIDIA provider not showing default model in dropdown due to dictionary key mismatch
+- **Display Name Auto-Update**: Fixed provider Display Name not updating automatically when switching between AI provider types
+- **Priority Handling**: Fixed manual priority edits not reordering providers; priorities are now normalized to sequential values after add/edit/delete operations
+- **Cohere API Image Format**: Fixed Cohere API request failing with "invalid type" error by using data URL string format instead of nested object
+- **New Provider Priority Default**: New providers now default to the end of the priority list instead of priority 1
+
+### Changed
+- **Main Window Size**: Increased default window dimensions from 750x750 to 900x950 for better usability
+- **Custom Endpoint Label**: Updated "Custom" provider type label to "Custom (OpenAI Compatible)" for clarity
+- **Cohere Models**: Limited to vision-capable model only (`command-a-vision-07-2025`) since other models don't support image input
+
 ## [2.1.2] - 2025-12-25
 
 ### Added
